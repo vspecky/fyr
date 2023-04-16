@@ -71,13 +71,13 @@ macro_rules! instr_3 {
         #[derive(Debug, Clone)]
         pub struct $name {
             pub rs: Value,
-            pub rd: Value,
+            pub rn: Value,
         }
 
         impl SsaInstr for $name {
             fn rewrite_value(&mut self, from: Value, to: Value) {
                 self.rs.rewrite(from, to);
-                self.rd.rewrite(from, to);
+                self.rn.rewrite(from, to);
             }
 
             fn get_name(&self) -> String {
@@ -87,7 +87,7 @@ macro_rules! instr_3 {
             fn get_args(&self) -> InstrArgs {
                 InstrArgs::from_iter([
                     ArgKind::NamedValue("rs".to_string(), self.rs),
-                    ArgKind::NamedValue("rd".to_string(), self.rd),
+                    ArgKind::NamedValue("rn".to_string(), self.rn),
                 ])
             }
         }

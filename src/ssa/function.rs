@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::fmt;
 
 use error_stack::{IntoReport, ResultExt};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -33,13 +33,25 @@ pub enum InstructionSet {
     Thumb,
 }
 
+impl fmt::Display for InstructionSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Thumb => "thumb",
+            }
+        )
+    }
+}
+
 pub struct Signature {
     pub name: String,
     pub isa: InstructionSet,
     pub args: Vec<VariableData>,
 }
 
-pub struct Function {
+struct Function {
     pub signature: Signature,
     pub blocks: DenseMap<Block, BlockData>,
     pub consts: DenseMap<Const, ConstKind>,
@@ -144,7 +156,12 @@ impl Function {
 
     fn print(&self) -> SsaResult<String> {
         let mut out = String::new();
-        outwrite!(out, "function {}(", self.signature.name);
+        outwrite!(
+            out,
+            "{} function {}(",
+            self.signature.isa,
+            self.signature.name
+        );
         let mut first = true;
         for (idx, arg) in self.signature.args.iter().enumerate() {
             if !first {
@@ -229,13 +246,15 @@ pub struct FunctionBuilder<'a> {
 
 impl<'a> FunctionBuilder<'a> {
     fn get_current_block(&self) -> SsaResult<&BlockData> {
-        self.get_block(self.current_block)
+        self.func
+            .get_block(self.func.current_block)
             .attach_printable("when trying to get current block")
     }
 
     fn get_current_block_mut(&mut self) -> SsaResult<&mut BlockData> {
-        let block_id = self.current_block;
-        self.get_block_mut(block_id)
+        let block_id = self.func.current_block;
+        self.func
+            .get_block_mut(block_id)
             .attach_printable("when trying to get mutable current block")
     }
 
@@ -250,19 +269,22 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     fn is_block_sealed(&self, block: Block) -> SsaResult<bool> {
-        self.get_block(block)
+        self.func
+            .get_block(block)
             .attach_printable("when trying to check if block is sealed")
             .map(|data| matches!(data.sealed, BlockSealStatus::Sealed))
     }
 
     fn is_block_empty(&self, block: Block) -> SsaResult<bool> {
-        self.get_block(block)
+        self.func
+            .get_block(block)
             .attach_printable("when trying to check if block is sealed")
             .map(|data| matches!(data.status, BlockFillKind::Empty))
     }
 
     fn get_block_preds(&self, block: Block) -> SsaResult<&[Block]> {
-        self.get_block(block)
+        self.func
+            .get_block(block)
             .attach_printable("when trying to get block predecessors")
             .map(|data| &data.predecessors as &[Block])
     }
@@ -281,6 +303,7 @@ impl<'a> FunctionBuilder<'a> {
 
     fn set_block_sealed(&mut self, block: Block) -> SsaResult<()> {
         let block = self
+            .func
             .get_block_mut(block)
             .attach_printable("when trying to set block as sealed")?;
         block.sealed = BlockSealStatus::Sealed;
@@ -289,6 +312,7 @@ impl<'a> FunctionBuilder<'a> {
 
     fn insert_block_phi(&mut self, block: Block, phi: Phi) -> SsaResult<()> {
         let block_data = self
+            .func
             .get_block_mut(block)
             .attach_printable("when trying to insert phi in block")?;
 
@@ -297,19 +321,20 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     fn add_successor(&mut self, to: Block, succ: Block) -> SsaResult<()> {
-        let succ_block = self.get_block_mut(succ)?;
+        let succ_block = self.func.get_block_mut(succ)?;
         succ_block
             .is_sealed()
             .and_err(SsaError::NoSealedSuccessors)?;
         succ_block.predecessors.push(to);
 
-        self.get_block_mut(to)?.successors.push(succ);
+        self.func.get_block_mut(to)?.successors.push(succ);
 
         Ok(())
     }
 
     fn get_variable_type(&mut self, var: Variable) -> SsaResult<ValueType> {
-        self.variables
+        self.func
+            .variables
             .get(var)
             .ok_or(SsaError::VariableNotFound)
             .into_report()
@@ -317,7 +342,8 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     fn write_variable(&mut self, block: Block, var: Variable, val: Value) -> SsaResult<()> {
-        self.var_defs
+        self.func
+            .var_defs
             .get_mut(&var)
             .ok_or(SsaError::VariableNotFound)
             .into_report()?
@@ -327,7 +353,7 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn make_block(&mut self) -> SsaResult<Block> {
-        Ok(self.blocks.insert(BlockData::new()))
+        Ok(self.func.blocks.insert(BlockData::new()))
     }
 
     pub fn switch_to_block(&mut self, block: Block) -> SsaResult<()> {
@@ -344,14 +370,14 @@ impl<'a> FunctionBuilder<'a> {
             .into_report()
             .attach_printable("cannot switch to a non-empty block")?;
 
-        self.current_block = block;
+        self.func.current_block = block;
 
         Ok(())
     }
 
     pub fn declare_variable(&mut self, name: String, var_type: ValueType) -> SsaResult<Variable> {
-        let var = self.variables.insert(VariableData { name, var_type });
-        self.var_defs.insert(var, FxHashMap::default());
+        let var = self.func.variables.insert(VariableData { name, var_type });
+        self.func.var_defs.insert(var, FxHashMap::default());
         Ok(var)
     }
 
@@ -361,6 +387,7 @@ impl<'a> FunctionBuilder<'a> {
             .attach_printable("when trying to define variable")?;
 
         let val_type = self
+            .func
             .values
             .get(value)
             .ok_or(SsaError::ValueNotFound)
@@ -373,7 +400,7 @@ impl<'a> FunctionBuilder<'a> {
             .into_report()
             .attach_printable("when trying to define variable")?;
 
-        self.write_variable(self.current_block, var, value)
+        self.write_variable(self.func.current_block, var, value)
             .attach_printable("when trying to update variable definition")?;
 
         Ok(())
@@ -383,6 +410,7 @@ impl<'a> FunctionBuilder<'a> {
         let err = "when trying to read variable";
 
         let local_value = self
+            .func
             .var_defs
             .get(&var)
             .ok_or(SsaError::VariableNotFound)
@@ -396,7 +424,7 @@ impl<'a> FunctionBuilder<'a> {
 
         if !self.is_block_sealed(block).attach_printable(err)? {
             let var_type = self.get_variable_type(var).attach_printable(err)?;
-            let phi_value = self.values.insert(ValueData {
+            let phi_value = self.func.values.insert(ValueData {
                 value_type: var_type,
                 value_kind: ValueKind::Phi { var, block },
             });
@@ -406,7 +434,8 @@ impl<'a> FunctionBuilder<'a> {
                 args: vec![],
             };
 
-            self.incomplete_phis
+            self.func
+                .incomplete_phis
                 .entry(block)
                 .or_default()
                 .insert(var, phi);
@@ -424,7 +453,7 @@ impl<'a> FunctionBuilder<'a> {
         } else {
             let var_type = self.get_variable_type(var).attach_printable(err)?;
 
-            let phi_value = self.values.insert(ValueData {
+            let phi_value = self.func.values.insert(ValueData {
                 value_type: var_type,
                 value_kind: ValueKind::Phi { var, block },
             });
@@ -449,12 +478,13 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn use_variable(&mut self, var: Variable) -> SsaResult<Value> {
-        self.read_variable(var, self.current_block)
+        self.read_variable(var, self.func.current_block)
     }
 
     fn try_remove_trivial_phi(&mut self, block: Block, var: Variable) -> SsaResult<Value> {
         let err = "when trying to remove trivial phi";
         let the_phi = self
+            .func
             .get_block(block)
             .attach_printable(err)?
             .phis
@@ -471,7 +501,8 @@ impl<'a> FunctionBuilder<'a> {
         Ok(if value_set.len() > 1 {
             phi_value
         } else {
-            self.get_block_mut(block)
+            self.func
+                .get_block_mut(block)
                 .attach_printable(err)?
                 .phis
                 .remove(&var)
@@ -479,7 +510,8 @@ impl<'a> FunctionBuilder<'a> {
                 .into_report()
                 .attach_printable(err)?;
 
-            self.get_value_mut(phi_value)
+            self.func
+                .get_value_mut(phi_value)
                 .attach_printable(err)?
                 .entomb();
 
@@ -491,13 +523,13 @@ impl<'a> FunctionBuilder<'a> {
                 .into_report()
                 .attach_printable(err)?;
 
-            for instr_data in self.instrs.values_mut() {
+            for instr_data in self.func.instrs.values_mut() {
                 instr_data.rewrite_value(phi_value, replace_to);
             }
 
             let mut to_try_remove: Vec<Block> = Vec::new();
 
-            for (block, block_data) in self.blocks.iter_mut() {
+            for (block, block_data) in self.func.blocks.iter_mut() {
                 if let Some(phi) = block_data.phis.get_mut(&var) {
                     if phi.rewrite_arg(phi_value, replace_to) {
                         to_try_remove.push(block);
@@ -519,7 +551,7 @@ impl<'a> FunctionBuilder<'a> {
             .attach_printable(err)?
             .and_err(SsaError::SealingSealedBlock)?;
 
-        let incomplete_phis = self.incomplete_phis.remove(&block).unwrap_or_default();
+        let incomplete_phis = self.func.incomplete_phis.remove(&block).unwrap_or_default();
 
         let preds = self.get_block_preds(block).attach_printable(err)?.to_vec();
 
@@ -544,20 +576,6 @@ impl<'a> FunctionBuilder<'a> {
     }
 }
 
-impl<'a> Deref for FunctionBuilder<'a> {
-    type Target = &'a mut Function;
-
-    fn deref(&self) -> &Self::Target {
-        &self.func
-    }
-}
-
-impl<'a> DerefMut for FunctionBuilder<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.func
-    }
-}
-
 pub struct FuncInstrBuilder<'short, 'long: 'short> {
     builder: &'short mut FunctionBuilder<'long>,
 }
@@ -568,11 +586,12 @@ macro_rules! defbuild_3 {
             let err = format!("when trying to add '{}' instruction", $name_str);
             let value_type = self
                 .builder
+                .func
                 .get_value(a)
                 .attach_printable_lazy(|| err.clone())?
                 .value_type;
 
-            self.build(instr::$instr { rs: a, rd: b }, value_type)
+            self.build(instr::$instr { rs: a, rn: b }, value_type)
                 .attach_printable_lazy(|| err.clone())?
                 .ok_or(SsaError::MissingResult)
                 .into_report()
@@ -612,7 +631,7 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
                 .attach_printable(err)?;
         }
 
-        let current_block_id = self.builder.current_block;
+        let current_block_id = self.builder.func.current_block;
         for block in data.get_referenced_blocks() {
             self.builder
                 .add_successor(current_block_id, block)
@@ -620,11 +639,11 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
         }
 
         let result = if data.has_result() {
-            let value = self.builder.values.insert(ValueData {
+            let value = self.builder.func.values.insert(ValueData {
                 value_type: res_type,
                 value_kind: ValueKind::InstrRes(instr),
             });
-            self.builder.results.insert(instr, value);
+            self.builder.func.results.insert(instr, value);
             Some(value)
         } else {
             None
@@ -660,6 +679,7 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
         let err = "when trying to add 'store' instruction";
         let value_type = self
             .builder
+            .func
             .get_value(val)
             .attach_printable(err)?
             .value_type;
@@ -676,6 +696,7 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
             .map(|val| -> SsaResult<ValueType> {
                 Ok(self
                     .builder
+                    .func
                     .get_value(val)
                     .attach_printable(err)?
                     .value_type)
@@ -775,12 +796,13 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
     fn build_const(&mut self, kind: ConstKind) -> SsaResult<Value> {
         let const_ref = self
             .builder
+            .func
             .const_map
             .get(&kind)
             .copied()
             .unwrap_or_else(|| {
-                let const_ref = self.builder.consts.insert(kind);
-                self.builder.const_map.insert(kind, const_ref);
+                let const_ref = self.builder.func.consts.insert(kind);
+                self.builder.func.const_map.insert(kind, const_ref);
                 const_ref
             });
 

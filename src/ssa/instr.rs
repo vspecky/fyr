@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    ssa::{error::SsaError, function::FuncRef, Block, Const, ConstKind, SsaResult, Value},
+    ssa::{function::FuncRef, Block, Const, ConstKind, Value},
     utils::EntityId,
 };
 
@@ -23,7 +23,7 @@ impl fmt::Display for ArgKind {
             Self::Str(s) => s.clone(),
             Self::Value(val) => val.to_string(),
             Self::NamedValue(name, val) => format!("{name}:{val}"),
-            Self::Block(block) => format!("%{}", block.to_string()),
+            Self::Block(block) => format!("%{}", block),
             Self::NamedBlock(name, block) => format!("{name}:%{block}"),
         })
     }
@@ -328,7 +328,7 @@ impl SsaInstr for Cmp {
     }
 
     fn get_name(&self) -> String {
-        if let Some(_) = self.result_cond {
+        if self.result_cond.is_some() {
             "cmpb"
         } else {
             "cmps"

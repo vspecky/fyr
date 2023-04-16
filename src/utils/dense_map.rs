@@ -31,6 +31,13 @@ impl<K, V> DenseMap<K, V> {
     }
 }
 
+impl<K, V> Default for DenseMap<K, V> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V> DenseMap<K, V>
 where
     K: EntityId,

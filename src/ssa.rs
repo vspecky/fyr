@@ -4,7 +4,7 @@ pub mod instr;
 
 use std::fmt;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::utils::{EntityId, UxoResult};
 
@@ -204,5 +204,12 @@ impl BlockData {
 
     fn is_sealed(&self) -> bool {
         matches!(self.sealed, BlockSealStatus::Sealed)
+    }
+}
+
+impl Default for BlockData {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }

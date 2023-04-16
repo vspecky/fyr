@@ -1,7 +1,4 @@
-use std::{
-    io::Write,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use error_stack::{IntoReport, ResultExt};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -9,7 +6,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::{
     ssa::{
         error::SsaError,
-        instr::{self, Instr, InstrData, SsaInstr},
+        instr::{self, Instr, InstrData},
         Block, BlockData, BlockFillKind, BlockSealStatus, Const, ConstKind, Phi, SsaResult, Value,
         ValueData, ValueKind, ValueType, Variable, VariableData,
     },
@@ -423,8 +420,7 @@ impl<'a> FunctionBuilder<'a> {
         let preds = self.get_block_preds(block).attach_printable(err)?.to_vec();
 
         Ok(if preds.len() == 1 {
-            let value = self.read_variable(var, preds[0])?;
-            value
+            self.read_variable(var, preds[0])?
         } else {
             let var_type = self.get_variable_type(var).attach_printable(err)?;
 
@@ -439,7 +435,7 @@ impl<'a> FunctionBuilder<'a> {
                 args: vec![],
             };
 
-            for pred in preds.to_vec() {
+            for pred in preds {
                 let value = self.read_variable(var, pred)?;
                 phi.args.push((pred, value));
             }
@@ -447,9 +443,8 @@ impl<'a> FunctionBuilder<'a> {
             self.insert_block_phi(block, phi).attach_printable(err)?;
             self.write_variable(block, var, phi_value)
                 .attach_printable(err)?;
-            let actual_value = self.try_remove_trivial_phi(block, var)?;
 
-            actual_value
+            self.try_remove_trivial_phi(block, var)?
         })
     }
 

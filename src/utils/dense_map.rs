@@ -47,12 +47,28 @@ where
     }
 
     #[inline]
+    pub fn get_mut(&mut self, idx: K) -> Option<&mut V> {
+        self.data.get_mut(idx.get_id())
+    }
+
+    #[inline]
     pub fn iter(&self) -> EntityIter<'_, K, V> {
         EntityIter::new(self.data.iter())
     }
 
+    #[inline]
     pub fn iter_mut(&mut self) -> EntityIterMut<'_, K, V> {
         EntityIterMut::new(self.data.iter_mut())
+    }
+
+    #[inline]
+    pub fn values(&self) -> Iter<'_, V> {
+        self.data.iter()
+    }
+
+    #[inline]
+    pub fn values_mut(&mut self) -> IterMut<'_, V> {
+        self.data.iter_mut()
     }
 }
 

@@ -1,6 +1,9 @@
 pub mod error;
+pub mod fbuilder;
 pub mod function;
 pub mod instr;
+pub mod module;
+pub mod passes;
 
 use std::fmt;
 

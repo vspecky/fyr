@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    ssa::{function::FuncRef, Block, Const, ConstKind, Value},
+    ssa::{function::Function, Block, Const, ConstKind, Value, ValueType},
     utils::EntityId,
 };
 
@@ -150,8 +150,9 @@ instr_3!(
 
 #[derive(Debug, Clone)]
 pub struct Call {
-    pub func: FuncRef,
+    pub func: Function,
     pub args: Vec<Value>,
+    pub ret_type: Option<ValueType>,
 }
 
 impl SsaInstr for Call {
@@ -159,6 +160,10 @@ impl SsaInstr for Call {
         for arg in &mut self.args {
             arg.rewrite(from, to);
         }
+    }
+
+    fn has_result(&self) -> bool {
+        self.ret_type.is_some()
     }
 
     fn get_name(&self) -> String {

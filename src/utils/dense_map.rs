@@ -1,7 +1,7 @@
 use std::{
     iter::Enumerate,
     marker::PhantomData,
-    ops::{Index, IndexMut},
+    ops::{self, Index, IndexMut},
     slice::{Iter, IterMut},
 };
 
@@ -69,6 +69,11 @@ where
     }
 
     #[inline]
+    pub fn keys(&self) -> Keys<K> {
+        Keys::new(0..self.data.len())
+    }
+
+    #[inline]
     pub fn values(&self) -> Iter<'_, V> {
         self.data.iter()
     }
@@ -98,6 +103,28 @@ where
     #[inline]
     fn index_mut(&mut self, index: K) -> &mut Self::Output {
         &mut self.data[index.get_id()]
+    }
+}
+
+pub struct Keys<K: EntityId> {
+    inner: ops::Range<usize>,
+    _marker: PhantomData<K>,
+}
+
+impl<K: EntityId> Keys<K> {
+    fn new(inner: ops::Range<usize>) -> Self {
+        Self {
+            inner,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<K: EntityId> Iterator for Keys<K> {
+    type Item = K;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(K::with_id)
     }
 }
 

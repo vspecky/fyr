@@ -13,7 +13,7 @@ use crate::{ssa::function::FunctionData, utils::UxoResult};
 pub trait Pass: Sized {
     type Error: error_stack::Context;
     fn name() -> String;
-    fn dependencies(manager: PassDepTracker) -> UxoResult<(), Self::Error>;
+    fn dependencies(tracker: PassDepTracker) -> UxoResult<(), Self::Error>;
     fn execute(store: PassStore) -> UxoResult<Self, Self::Error>;
 }
 

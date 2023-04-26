@@ -122,6 +122,14 @@ impl FunctionData {
             .into_report()
     }
 
+    pub(super) fn get_block_preds(&self, block: Block) -> SsaResult<Vec<Block>> {
+        Ok(self.get_block(block)?.predecessors.clone())
+    }
+
+    pub(super) fn get_block_succs(&self, block: Block) -> SsaResult<Vec<Block>> {
+        Ok(self.get_block(block)?.successors.clone())
+    }
+
     pub(super) fn get_value(&self, value: Value) -> SsaResult<&ValueData> {
         self.values
             .get(value)
@@ -139,6 +147,13 @@ impl FunctionData {
     pub(super) fn get_instr(&self, instr: Instr) -> SsaResult<&InstrData> {
         self.instrs
             .get(instr)
+            .ok_or(SsaError::InstrNotFound)
+            .into_report()
+    }
+
+    pub(super) fn get_instr_mut(&mut self, instr: Instr) -> SsaResult<&mut InstrData> {
+        self.instrs
+            .get_mut(instr)
             .ok_or(SsaError::InstrNotFound)
             .into_report()
     }
@@ -188,7 +203,11 @@ impl FunctionData {
             for phi in block_data.phis.values() {
                 let value_data = self.get_value(phi.value)?;
                 let var_data = self.get_var(phi.var)?;
-                let args: Vec<String> = phi.args.iter().map(|(_, val)| val.to_string()).collect();
+                let args: Vec<String> = phi
+                    .args
+                    .iter()
+                    .map(|(blk, val)| format!("{blk}:{val}"))
+                    .collect();
 
                 outwrite!(
                     out,

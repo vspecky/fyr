@@ -23,7 +23,7 @@ pub struct FunctionBuilder<'a> {
 }
 
 impl<'a> FunctionBuilder<'a> {
-    fn print(&self) -> SsaResult<String> {
+    pub(super) fn print(&self) -> SsaResult<String> {
         self.func_data.print()
     }
 

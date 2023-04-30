@@ -53,6 +53,7 @@ pub struct Signature {
     pub ret_type: Option<ValueType>,
 }
 
+#[derive(Clone)]
 pub struct FunctionData {
     pub(super) signature: Signature,
     pub(super) blocks: DenseMap<Block, BlockData>,

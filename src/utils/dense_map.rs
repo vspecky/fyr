@@ -10,6 +10,7 @@ pub trait EntityId {
     fn with_id(idx: usize) -> Self;
 }
 
+#[derive(Clone)]
 pub struct DenseMap<K, V> {
     data: Vec<V>,
     _marker: PhantomData<K>,
@@ -26,6 +27,20 @@ impl<K, V> DenseMap<K, V> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn with_prefilled(length: usize) -> Self
+    where
+        V: Default,
+    {
+        let mut data: Vec<V> = Vec::with_capacity(length);
+        for _ in 0..length {
+            data.push(V::default());
+        }
+        Self {
+            data,
             _marker: PhantomData,
         }
     }
@@ -51,6 +66,20 @@ where
     #[inline]
     pub fn get(&self, idx: K) -> Option<&V> {
         self.data.get(idx.get_id())
+    }
+
+    #[inline]
+    pub fn contains(&self, key: &K) -> bool {
+        key.get_id() < self.data.len()
+    }
+
+    pub fn set(&mut self, key: K, val: V) -> bool {
+        if self.contains(&key) {
+            self.data[key.get_id()] = val;
+            true
+        } else {
+            false
+        }
     }
 
     #[inline]
@@ -81,6 +110,11 @@ where
     #[inline]
     pub fn values_mut(&mut self) -> IterMut<'_, V> {
         self.data.iter_mut()
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 }
 

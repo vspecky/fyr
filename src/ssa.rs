@@ -2,6 +2,7 @@ pub mod error;
 pub mod fbuilder;
 pub mod function;
 pub mod instr;
+pub mod macros;
 pub mod module;
 pub mod passes;
 
@@ -63,7 +64,7 @@ impl fmt::Display for ValueType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Phi {
     pub var: Variable,
     pub value: Value,
@@ -83,11 +84,13 @@ impl Phi {
     }
 }
 
+#[derive(Clone)]
 pub struct ValueData {
     pub value_type: ValueType,
     pub value_kind: ValueKind,
 }
 
+#[derive(Clone)]
 pub enum ValueKind {
     InstrRes(instr::Instr),
     FuncArg,
@@ -150,7 +153,7 @@ pub struct VariableData {
     pub var_type: ValueType,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Block(usize);
 
 impl EntityId for Block {
@@ -184,6 +187,7 @@ pub enum BlockSealStatus {
     Sealed,
 }
 
+#[derive(Clone)]
 pub struct BlockData {
     pub predecessors: Vec<Block>,
     pub successors: Vec<Block>,

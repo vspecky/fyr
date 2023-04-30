@@ -123,7 +123,7 @@ impl Pass for CriticalEdgeRemoval {
     }
 
     fn execute(mut store: PassStore) -> UxoResult<Self, Self::Error> {
-        remove_critical_edges(store.get_func())?;
+        remove_critical_edges(store.get_func_mut())?;
         Ok(Self)
     }
 }

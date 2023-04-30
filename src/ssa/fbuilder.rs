@@ -232,7 +232,7 @@ impl<'a> FunctionBuilder<'a> {
             let phi = Phi {
                 var,
                 value: phi_value,
-                args: vec![],
+                args: FxHashMap::default(),
             };
 
             self.incomplete_phis
@@ -261,12 +261,12 @@ impl<'a> FunctionBuilder<'a> {
             let mut phi = Phi {
                 var,
                 value: phi_value,
-                args: vec![],
+                args: FxHashMap::default(),
             };
 
             for pred in preds {
                 let value = self.read_variable(var, pred)?;
-                phi.args.push((pred, value));
+                phi.args.insert(pred, value);
             }
 
             self.insert_block_phi(block, phi).attach_printable(err)?;
@@ -294,8 +294,7 @@ impl<'a> FunctionBuilder<'a> {
             .attach_printable(err)?;
 
         let phi_value = the_phi.value;
-        let mut value_set: FxHashSet<Value> =
-            FxHashSet::from_iter(the_phi.args.iter().map(|(_, val)| val).copied());
+        let mut value_set: FxHashSet<Value> = FxHashSet::from_iter(the_phi.args.values().copied());
         value_set.remove(&phi_value);
 
         Ok(if value_set.len() > 1 {
@@ -358,7 +357,7 @@ impl<'a> FunctionBuilder<'a> {
         for (var, mut phi) in incomplete_phis {
             for pred in &preds {
                 let value = self.read_variable(var, *pred)?;
-                phi.args.push((*pred, value));
+                phi.args.insert(*pred, value);
             }
 
             self.insert_block_phi(block, phi).attach_printable(err)?;

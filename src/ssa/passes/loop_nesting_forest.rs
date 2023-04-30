@@ -246,7 +246,7 @@ mod tests {
             "invalid number of loop body nodes found",
         );
 
-        let diff: FxHashSet<Block> = actual.symmetric_difference(&found).copied().collect();
+        let diff: FxHashSet<Block> = actual.symmetric_difference(found).copied().collect();
 
         assert!(
             diff.is_empty(),
@@ -282,7 +282,7 @@ mod tests {
         for (node, succs) in forest.forest.iter() {
             let block_strs: Vec<String> = succs.iter().map(|b| b.to_string()).collect();
 
-            println!("{} -> [{}]", node.to_string(), block_strs.join(", "));
+            println!("{node} -> [{}]", block_strs.join(", "));
         }
     }
 
@@ -325,7 +325,7 @@ mod tests {
         for (node, succs) in forest.forest.iter() {
             let block_strs: Vec<String> = succs.iter().map(|b| b.to_string()).collect();
 
-            println!("{} -> [{}]", node.to_string(), block_strs.join(", "));
+            println!("{node} -> [{}]", block_strs.join(", "));
         }
     }
 }

@@ -116,6 +116,11 @@ where
     pub fn len(&self) -> usize {
         self.data.len()
     }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
 }
 
 impl<K, V> Index<K> for DenseMap<K, V>

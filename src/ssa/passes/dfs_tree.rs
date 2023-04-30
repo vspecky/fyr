@@ -124,6 +124,11 @@ impl DfsTree {
             postorder: rev_postorder.into_iter().rev().collect(),
         })
     }
+
+    #[inline]
+    pub(super) fn is_back_edge(&self, edge: (Block, Block)) -> bool {
+        self.back_edges.contains(&edge)
+    }
 }
 
 impl passes::Pass for DfsTree {
@@ -213,9 +218,9 @@ mod tests {
 
         println!("\nDFS Tree:\n");
         for (node, succs) in dfs_tree.tree.iter() {
-            let block_strs: Vec<String> = succs.into_iter().map(|b| b.to_string()).collect();
+            let block_strs: Vec<String> = succs.iter().map(|b| b.to_string()).collect();
 
-            println!("{} -> [{}]", node.to_string(), block_strs.join(", "));
+            println!("{node} -> [{}]", block_strs.join(", "));
         }
 
         println!("\nBACKEDGES:\n");

@@ -166,6 +166,30 @@ impl FunctionData {
             .into_report()
     }
 
+    pub(super) fn get_succ_phi_uses(&self, block: Block) -> SsaResult<Vec<Value>> {
+        Ok(self
+            .get_block_succs(block)?
+            .into_iter()
+            .map(|succ| self.get_block(succ))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flat_map(|data| data.get_args_from_block(block))
+            .collect())
+    }
+
+    pub(super) fn get_instr_def(&self, instr: Instr) -> Option<Value> {
+        self.results.get(&instr).copied()
+    }
+
+    pub(super) fn get_instr_uses(&self, instr: Instr) -> SsaResult<Vec<Value>> {
+        Ok(self.get_instr(instr)?.get_uses())
+    }
+
+    pub(super) fn get_phi_defs(&self, block: Block) -> SsaResult<Vec<Value>> {
+        let data = self.get_block(block)?;
+        Ok(data.phis.values().map(|phi| phi.value).collect())
+    }
+
     pub(super) fn print(&self) -> SsaResult<String> {
         let mut out = String::new();
         outwrite!(

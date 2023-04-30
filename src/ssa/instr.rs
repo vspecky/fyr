@@ -63,6 +63,8 @@ pub trait SsaInstr {
     fn get_name(&self) -> String;
 
     fn get_args(&self) -> InstrArgs;
+
+    fn get_uses(&self) -> Vec<Value>;
 }
 
 macro_rules! instr_3 {
@@ -89,6 +91,10 @@ macro_rules! instr_3 {
                     ArgKind::NamedValue("rs".to_string(), self.rs),
                     ArgKind::NamedValue("rn".to_string(), self.rn),
                 ])
+            }
+
+            fn get_uses(&self) -> Vec<Value> {
+                vec![self.rs, self.rn]
             }
         }
     };
@@ -173,6 +179,10 @@ impl SsaInstr for Call {
     fn get_args(&self) -> InstrArgs {
         InstrArgs(self.args.iter().copied().map(ArgKind::Value).collect())
     }
+
+    fn get_uses(&self) -> Vec<Value> {
+        self.args.clone()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +206,10 @@ impl SsaInstr for Load {
             ArgKind::NamedValue("base".to_string(), self.base),
             ArgKind::NamedValue("offset".to_string(), self.offset),
         ])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.base, self.offset]
     }
 }
 
@@ -228,6 +242,10 @@ impl SsaInstr for Store {
             ArgKind::NamedValue("offset".to_string(), self.offset),
         ])
     }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.val, self.base, self.offset]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -256,6 +274,10 @@ impl SsaInstr for LoadConst {
         };
 
         InstrArgs::from_iter([ArgKind::Str(format!("#{value}"))])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![]
     }
 }
 
@@ -289,6 +311,10 @@ impl SsaInstr for Ret {
                 .map(|val| vec![ArgKind::Value(val)])
                 .unwrap_or_default(),
         )
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        self.val.map(|v| vec![v]).unwrap_or_default()
     }
 }
 
@@ -352,6 +378,10 @@ impl SsaInstr for Cmp {
 
         InstrArgs(args)
     }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.rs, self.rn]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -403,6 +433,10 @@ impl SsaInstr for Branch {
             ArgKind::NamedBlock("else".to_string(), self.else_block),
         ])
     }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -431,6 +465,10 @@ impl SsaInstr for Jump {
 
     fn get_args(&self) -> InstrArgs {
         InstrArgs(vec![ArgKind::Block(self.dest)])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![]
     }
 }
 

@@ -1,9 +1,12 @@
 pub mod critical_edge_removal;
 pub mod dfs_tree;
+pub mod liveness_analysis;
 pub mod loop_nesting_forest;
 
 pub use critical_edge_removal::CriticalEdgeRemoval;
 pub use dfs_tree::DfsTree;
+pub use liveness_analysis::LivenessAnalysis;
+pub use loop_nesting_forest::LoopNestingForest;
 
 use std::{
     any::{Any, TypeId},

@@ -83,6 +83,7 @@ fn remove_critical_edges(func: &mut FunctionData) -> UxoResult<(), CriticalEdgeR
                         jmp.dest = new_block;
                     }
                 }
+
                 instr::InstrData::Branch(br) => {
                     if br.then_block == succ {
                         br.then_block = new_block;
@@ -99,10 +100,8 @@ fn remove_critical_edges(func: &mut FunctionData) -> UxoResult<(), CriticalEdgeR
                 .change_context(CriticalEdgeRemovalError::FunctionError)?;
 
             for phi in succ_block_data.phis.values_mut() {
-                for (arg_block, _) in phi.args.iter_mut() {
-                    if *arg_block == block {
-                        *arg_block = new_block;
-                    }
+                if let Some(val) = phi.args.remove(&block) {
+                    phi.args.insert(new_block, val);
                 }
             }
         }

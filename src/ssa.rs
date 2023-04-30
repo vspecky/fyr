@@ -68,7 +68,7 @@ impl fmt::Display for ValueType {
 pub struct Phi {
     pub var: Variable,
     pub value: Value,
-    pub args: Vec<(Block, Value)>,
+    pub args: FxHashMap<Block, Value>,
 }
 
 impl Phi {
@@ -211,6 +211,13 @@ impl BlockData {
 
     fn is_sealed(&self) -> bool {
         matches!(self.sealed, BlockSealStatus::Sealed)
+    }
+
+    fn get_args_from_block(&self, block: Block) -> Vec<Value> {
+        self.phis
+            .values()
+            .filter_map(|phi| phi.args.get(&block).copied())
+            .collect()
     }
 }
 

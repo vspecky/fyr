@@ -62,6 +62,7 @@ impl BlockIndexVec {
 pub struct DfsTree {
     pub tree: DenseMap<Block, Vec<Block>>,
     pub back_edges: FxHashSet<(Block, Block)>,
+    pub preorder: Vec<Block>,
     pub postorder: Vec<Block>,
 }
 
@@ -118,9 +119,25 @@ impl DfsTree {
             }
         }
 
+        let mut preorder: Vec<Block> = Vec::with_capacity(res_map.len());
+        let mut preorder_stack: Vec<Block> = vec![Block::with_id(0)];
+
+        while let Some(block) = preorder_stack.pop() {
+            preorder.push(block);
+            let children = res_map
+                .get(block)
+                .ok_or(DfsTreeError::ResBlockNotFound)
+                .into_report()?;
+
+            for child in children.iter().rev().copied() {
+                preorder_stack.push(child);
+            }
+        }
+
         Ok(Self {
             tree: res_map,
             back_edges,
+            preorder,
             postorder: rev_postorder.into_iter().rev().collect(),
         })
     }
@@ -146,7 +163,7 @@ impl passes::Pass for DfsTree {
         Ok(())
     }
 
-    fn execute(mut store: passes::PassStore) -> UxoResult<Self, Self::Error> {
+    fn execute(store: passes::PassStore) -> UxoResult<Self, Self::Error> {
         DfsTree::from_function(store.get_func())
     }
 }

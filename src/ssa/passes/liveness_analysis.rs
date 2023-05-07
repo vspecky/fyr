@@ -198,6 +198,18 @@ pub struct LivenessAnalysis {
     pub live_out: DenseMap<Block, FxHashSet<Value>>,
 }
 
+impl LivenessAnalysis {
+    pub fn get_live_out(
+        &self,
+        block: Block,
+    ) -> UxoResult<&FxHashSet<Value>, LivenessAnalysisError> {
+        self.live_out
+            .get(block)
+            .ok_or(LivenessAnalysisError::LiveOutNotFound)
+            .into_report()
+    }
+}
+
 impl passes::Pass for LivenessAnalysis {
     type Error = LivenessAnalysisError;
 
@@ -252,6 +264,20 @@ mod tests {
         println!("\nLiveOut:\n");
         for (block, set) in liveness.live_out.iter() {
             println!("{block} -> {:?}", set);
+        }
+    }
+
+    #[test]
+    fn print_liveness() {
+        let mut func = test_utils::get_function_with_single_loop();
+        let liveness = test_utils::get_pass::<LivenessAnalysis>(&mut func);
+        let liveness = liveness.borrow();
+        println!("FUNC:\n{}", func.print().expect("print"));
+        println!();
+        for block in func.blocks.keys() {
+            let livein = liveness.live_in.get(block).unwrap();
+            let liveout = liveness.live_out.get(block).unwrap();
+            println!("{block} -> {livein:?} | {liveout:?}");
         }
     }
 }

@@ -1,5 +1,6 @@
 pub mod critical_edge_removal;
 pub mod dfs_tree;
+pub mod interference_graph;
 pub mod liveness_analysis;
 pub mod loop_nesting_forest;
 

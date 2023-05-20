@@ -46,6 +46,22 @@ impl<K, V> DenseMap<K, V> {
     }
 }
 
+impl<K> DenseMap<K, K>
+where
+    K: EntityId,
+{
+    pub fn with_mirrored(length: usize) -> Self {
+        let mut data: Vec<K> = Vec::with_capacity(length);
+        for id in 0..length {
+            data.push(K::with_id(id));
+        }
+        Self {
+            data,
+            _marker: PhantomData,
+        }
+    }
+}
+
 impl<K, V> Default for DenseMap<K, V> {
     #[inline]
     fn default() -> Self {

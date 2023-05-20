@@ -156,6 +156,12 @@ pub struct VariableData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Block(usize);
 
+impl Default for Block {
+    fn default() -> Self {
+        Self::with_id(0)
+    }
+}
+
 impl EntityId for Block {
     #[inline]
     fn get_id(&self) -> usize {

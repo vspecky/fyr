@@ -16,6 +16,8 @@ pub enum DfsTreeError {
     ResBlockNotFound,
     #[error("there was an inexplicable failure")]
     InexplicableFailure,
+    #[error("could not find parent of block")]
+    ParentNotFound,
 }
 
 struct BlockIndexVec {
@@ -62,6 +64,7 @@ impl BlockIndexVec {
 pub struct DfsTree {
     pub tree: DenseMap<Block, Vec<Block>>,
     pub back_edges: FxHashSet<(Block, Block)>,
+    pub parents: DenseMap<Block, Block>,
     pub preorder: Vec<Block>,
     pub postorder: Vec<Block>,
 }
@@ -73,6 +76,7 @@ impl DfsTree {
         let first_block = Block::with_id(0);
         let mut stack: Vec<(Block, Block)> = Vec::new();
         let mut visited: FxHashSet<Block> = FxHashSet::default();
+        let mut parents: DenseMap<Block, Block> = DenseMap::with_prefilled(func.blocks.len());
         let mut idx_map = BlockIndexVec::new();
         let mut back_edges: FxHashSet<(Block, Block)> = FxHashSet::default();
         let mut rev_postorder: Vec<Block> = Vec::new();
@@ -96,6 +100,7 @@ impl DfsTree {
                 }
                 continue;
             }
+            parents.set(next_block, pred);
             visited.insert(next_block);
             idx_map.push(next_block);
             rev_postorder.push(next_block);
@@ -136,6 +141,7 @@ impl DfsTree {
 
         Ok(Self {
             tree: res_map,
+            parents,
             back_edges,
             preorder,
             postorder: rev_postorder.into_iter().rev().collect(),
@@ -145,6 +151,14 @@ impl DfsTree {
     #[inline]
     pub(super) fn is_back_edge(&self, edge: (Block, Block)) -> bool {
         self.back_edges.contains(&edge)
+    }
+
+    pub(super) fn get_parent(&self, block: Block) -> UxoResult<Block, DfsTreeError> {
+        self.parents
+            .get(block)
+            .copied()
+            .ok_or(DfsTreeError::ParentNotFound)
+            .into_report()
     }
 }
 

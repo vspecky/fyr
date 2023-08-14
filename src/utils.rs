@@ -1,8 +1,15 @@
 pub mod dense_map;
+pub mod union_find;
 
-pub use dense_map::{DenseMap, EntityId};
+pub use dense_map::DenseMap;
+pub use union_find::UnionFind;
 
 pub type UxoResult<R, E> = error_stack::Result<R, E>;
+
+pub trait EntityId: Copy {
+    fn get_id(&self) -> usize;
+    fn with_id(idx: usize) -> Self;
+}
 
 pub trait BoolExt<E> {
     fn and_err(&self, err: E) -> Result<(), E>;

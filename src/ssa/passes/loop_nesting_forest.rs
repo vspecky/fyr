@@ -9,110 +9,23 @@ use crate::{
         passes::{self, Pass, PassDepTracker, PassStore},
         Block,
     },
-    utils::{BoolExt, DenseMap, EntityId, UxoResult},
+    utils::{DenseMap, UnionFind, UxoResult},
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoopForestError {
     #[error("failed a dependency pass for 'loop_nesting_forest'")]
     DependentPassFailure,
-    #[error("a block was not found in the union find data structure")]
-    UnionFindBlockNotFound,
-    #[error("a rank was not found in the union find data structure")]
-    UnionFindRankNotFound,
     #[error("a block was not found in the forest")]
     ForestBlockNotFound,
     #[error("there was an error when interacting with the function data")]
     FunctionError,
 }
 
-pub struct UnionFind {
-    pub parent: DenseMap<Block, Block>,
-    pub rank: DenseMap<Block, u16>,
-}
-
-impl UnionFind {
-    fn new(length: usize) -> Self {
-        let mut parent: DenseMap<Block, Block> = DenseMap::new();
-        let mut rank: DenseMap<Block, u16> = DenseMap::new();
-
-        for i in 0..length {
-            parent.insert(Block::with_id(i));
-            rank.insert(0);
-        }
-
-        Self { parent, rank }
-    }
-
-    fn find(&mut self, node: Block) -> UxoResult<Block, LoopForestError> {
-        let parent = self
-            .parent
-            .get(node)
-            .copied()
-            .ok_or(LoopForestError::UnionFindBlockNotFound)
-            .into_report()
-            .attach_printable("when trying to get parent")?;
-
-        if node == parent {
-            return Ok(node);
-        }
-
-        let grandparent = self.find(parent)?;
-
-        self.parent
-            .set(parent, grandparent)
-            .or_err(LoopForestError::UnionFindBlockNotFound)
-            .into_report()
-            .attach_printable("when trying to set parent to grandparent")?;
-
-        Ok(grandparent)
-    }
-
-    fn union(&mut self, mut n1: Block, mut n2: Block) -> UxoResult<(), LoopForestError> {
-        n1 = self.find(n1)?;
-        n2 = self.find(n2)?;
-
-        if n1 != n2 {
-            let mut r1 = self
-                .rank
-                .get(n1)
-                .copied()
-                .ok_or(LoopForestError::UnionFindRankNotFound)
-                .into_report()?;
-
-            let mut r2 = self
-                .rank
-                .get(n2)
-                .copied()
-                .ok_or(LoopForestError::UnionFindRankNotFound)
-                .into_report()?;
-
-            if r1 < r2 {
-                (n1, n2) = (n2, n1);
-                (r1, r2) = (r2, r1);
-            }
-
-            self.parent
-                .set(n2, n1)
-                .or_err(LoopForestError::UnionFindRankNotFound)
-                .into_report()?;
-
-            if r1 == r2 {
-                self.rank
-                    .set(n1, r1 + 1)
-                    .or_err(LoopForestError::UnionFindRankNotFound)
-                    .into_report()?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
 struct LoopNestingForestBuilder<'a> {
     func: &'a FunctionData,
     dfs: &'a passes::DfsTree,
-    union_find: UnionFind,
+    union_find: UnionFind<Block>,
     forest: DenseMap<Block, Vec<Block>>,
     roots: FxHashSet<Block>,
 }
@@ -122,7 +35,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
         Self {
             func,
             dfs: dfs_tree,
-            union_find: UnionFind::new(func.blocks.len()),
+            union_find: UnionFind::new(),
             forest: DenseMap::with_prefilled(func.blocks.len()),
             roots: FxHashSet::default(),
         }
@@ -141,7 +54,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
 
         for loop_block in body {
             children_list.push(loop_block);
-            self.union_find.union(header, loop_block)?;
+            self.union_find.union(header, loop_block);
             self.roots.remove(&loop_block);
         }
 
@@ -157,7 +70,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
             .iter()
             .filter(|(_, b)| *b == potential_header)
             .map(|(b, _)| self.union_find.find(*b))
-            .collect::<Result<_, _>>()?;
+            .collect();
         worklist.remove(&potential_header);
 
         while let Some(block) = worklist.pop_first() {
@@ -173,7 +86,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
                     continue;
                 }
 
-                let found = self.union_find.find(pred)?;
+                let found = self.union_find.find(pred);
 
                 if found != potential_header
                     && !loop_body.contains(&found)
@@ -237,7 +150,10 @@ impl Pass for LoopNestingForest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ssa::passes::test_utils;
+    use crate::{
+        ssa::passes::test_utils,
+        utils::EntityId,
+    };
 
     fn verify_loop_body(found: &FxHashSet<Block>, actual: &FxHashSet<Block>) {
         assert_eq!(

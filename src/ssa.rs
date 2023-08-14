@@ -15,7 +15,7 @@ use crate::utils::{EntityId, UxoResult};
 pub type SsaResult<R> = UxoResult<R, error::SsaError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Value(usize);
+pub struct Value(u32);
 
 impl Value {
     fn rewrite(&mut self, from: Value, to: Value) {
@@ -41,12 +41,12 @@ pub enum ValueType {
 impl EntityId for Value {
     #[inline]
     fn get_id(&self) -> usize {
-        self.0
+        self.0 as usize
     }
 
     #[inline]
     fn with_id(idx: usize) -> Self {
-        Self(idx)
+        Self(idx as u32)
     }
 }
 
@@ -105,17 +105,17 @@ impl ValueData {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Const(usize);
+pub struct Const(u32);
 
 impl EntityId for Const {
     #[inline]
     fn get_id(&self) -> usize {
-        self.0
+        self.0 as usize
     }
 
     #[inline]
     fn with_id(idx: usize) -> Self {
-        Self(idx)
+        Self(idx as u32)
     }
 }
 
@@ -127,17 +127,17 @@ pub enum ConstKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Variable(usize);
+pub struct Variable(u32);
 
 impl EntityId for Variable {
     #[inline]
     fn get_id(&self) -> usize {
-        self.0
+        self.0 as usize
     }
 
     #[inline]
     fn with_id(idx: usize) -> Self {
-        Self(idx)
+        Self(idx as u32)
     }
 }
 
@@ -154,7 +154,7 @@ pub struct VariableData {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Block(usize);
+pub struct Block(u32);
 
 impl Default for Block {
     fn default() -> Self {
@@ -165,12 +165,12 @@ impl Default for Block {
 impl EntityId for Block {
     #[inline]
     fn get_id(&self) -> usize {
-        self.0
+        self.0 as usize
     }
 
     #[inline]
     fn with_id(idx: usize) -> Self {
-        Self(idx)
+        Self(idx as u32)
     }
 }
 

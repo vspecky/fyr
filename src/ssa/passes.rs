@@ -1,9 +1,13 @@
 pub mod critical_edge_removal;
+pub mod cssa_translation;
+pub mod def_use;
 pub mod dfs_tree;
 pub mod dominator_tree;
+pub mod global_next_use;
 pub mod interference_graph;
 pub mod liveness_analysis;
 pub mod loop_nesting_forest;
+pub mod spilling;
 
 pub use critical_edge_removal::CriticalEdgeRemoval;
 pub use dfs_tree::DfsTree;

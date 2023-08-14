@@ -472,6 +472,37 @@ impl SsaInstr for Jump {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct CopyV {
+    pub val: Value,
+}
+
+impl SsaInstr for CopyV {
+    fn rewrite_value(&mut self, from: Value, to: Value) {
+        self.val.rewrite(from, to);
+    }
+
+    fn has_result(&self) -> bool {
+        true
+    }
+
+    fn is_terminal(&self) -> bool {
+        false
+    }
+
+    fn get_name(&self) -> String {
+        "copy".to_string()
+    }
+
+    fn get_args(&self) -> InstrArgs {
+        InstrArgs(vec![ArgKind::Value(self.val)])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.val]
+    }
+}
+
 impl_from_instr_data!(
     Add, Adc, Sub, Mul, Lsl, Lsr, Asl, Call, Load, Store, LoadConst, Ret, Cmp, Branch, Jump
 );
@@ -508,6 +539,7 @@ pub enum InstrData {
     Cmp(Cmp),
     Branch(Branch),
     Jump(Jump),
+    CopyV(CopyV),
 }
 
 impl Deref for InstrData {
@@ -530,6 +562,7 @@ impl Deref for InstrData {
             Self::Cmp(cmp) => cmp,
             Self::Branch(branch) => branch,
             Self::Jump(jump) => jump,
+            Self::CopyV(copy_v) => copy_v,
         }
     }
 }
@@ -552,6 +585,7 @@ impl DerefMut for InstrData {
             Self::Cmp(cmp) => cmp,
             Self::Branch(branch) => branch,
             Self::Jump(jump) => jump,
+            Self::CopyV(copy_v) => copy_v,
         }
     }
 }

@@ -5,10 +5,7 @@ use std::{
     slice::{Iter, IterMut},
 };
 
-pub trait EntityId {
-    fn get_id(&self) -> usize;
-    fn with_id(idx: usize) -> Self;
-}
+use crate::utils::EntityId;
 
 #[derive(Clone)]
 pub struct DenseMap<K, V> {

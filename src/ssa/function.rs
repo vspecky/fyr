@@ -205,7 +205,7 @@ impl FunctionData {
             }
             first = false;
 
-            outwrite!(out, "{}::{}", Value(idx), arg.var_type);
+            outwrite!(out, "{}::{}", Value::with_id(idx), arg.var_type);
         }
         outwrite!(out, ") {{\n");
 

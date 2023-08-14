@@ -1,0 +1,12 @@
+[package]
+name = "fyrc_ssa"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
+
+# Third Party
+rustc-hash = "1.1.0"

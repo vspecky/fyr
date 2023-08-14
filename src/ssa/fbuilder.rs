@@ -40,7 +40,7 @@ impl<'a> FunctionBuilder<'a> {
             .attach_printable("when trying to get mutable current block")
     }
 
-    fn is_current_block_filled(&self) -> SsaResult<bool> {
+    pub(crate) fn is_current_block_filled(&self) -> SsaResult<bool> {
         self.get_current_block()
             .map(|block| matches!(block.status, BlockFillKind::Filled))
     }

@@ -1,0 +1,16 @@
+[package]
+name = "fyrc_ssa_passes"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa" }
+fyrc_ssa_builder = { version = "0.1.0", path = "../fyrc_ssa_builder" }
+fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
+
+# Third party dependencies
+error-stack = "0.4.0"
+rustc-hash = "1.1.0"
+thiserror = "1.0.47"

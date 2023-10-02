@@ -1,0 +1,18 @@
+[package]
+name = "fyrc_ssa"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+viz = ["dep:graphviz-rust"]
+
+[dependencies]
+fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
+
+# Third Party
+error-stack = "0.4.0"
+graphviz-rust = { version = "0.6.6", optional = true }
+rustc-hash = "1.1.0"
+thiserror = "1.0.47"

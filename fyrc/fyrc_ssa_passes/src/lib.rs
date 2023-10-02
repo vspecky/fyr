@@ -9,6 +9,7 @@ pub mod loop_nesting_forest;
 pub mod utils;
 
 pub use critical_edge_removal::CriticalEdgeRemoval;
+pub use cssa_translation::CssaTranslation;
 pub use dfs_tree::DfsTree;
 pub use dominator_tree::DominatorTree;
 pub use interference_graph::InterferenceGraph;
@@ -150,8 +151,7 @@ impl<'a> PassStore<'a> {
     }
 }
 
-#[cfg(test)]
-mod test_utils {
+pub mod test_utils {
     use super::*;
 
     pub trait MultiPass {

@@ -2,7 +2,7 @@ pub mod dense_map;
 pub mod union_find;
 
 pub use dense_map::DenseMap;
-pub use union_find::UnionFind;
+pub use union_find::SimpleUnionFind;
 
 pub trait EntityId: Copy {
     fn get_id(&self) -> usize;

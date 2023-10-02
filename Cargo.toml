@@ -1,2 +1,3 @@
 [workspace]
 members = ["fyrc/*"]
+resolver = "2"

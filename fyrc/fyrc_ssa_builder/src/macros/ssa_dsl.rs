@@ -1,80 +1,15 @@
-#[doc(hidden)]
-macro_rules! __instr__ {
-    ($builder:ident: #vdef $var:ident $val:ident) => {
-        $builder.define_variable($var, $val)
-            .expect("var def");
-    };
-
-    ($builder:ident: #block $name:ident) => {
-        let $name = $builder.make_block().expect("make block");
-    };
-
-    ($builder:ident: #seal $block:ident) => {
-        $builder.seal_block($block).expect("block seal");
-    };
-
-    ($builder:ident: #switch $block:ident) => {
-        $builder.switch_to_block($block).expect("switch block");
-    };
-
-    ($builder:ident: #vdecl $res:ident $name:literal::$var_type:ident) => {
-        let $res = $builder.declare_variable(
-            $name.to_string(),
-            $crate::ssa::ValueType::$var_type
-        )
-        .expect("var decl");
-    };
-
-    ($builder:ident: #vuse $var:ident $($res:ident)?) => {
-        $(let $res =)? $builder.use_variable($var).expect("var use");
-    };
-
-    ($builder:ident: $res:ident = $ins:ident $($arg:expr),+) => {
-        let $res = $builder.ins().$ins($($arg),+).expect("instruction addition");
-    };
-
-    ($builder:ident: brs $cond:ident, $then:ident, $else:ident) => {
-        $builder
-            .ins()
-            .brs($crate::ssa::instr::Cond::$cond, $then, $else)
-            .expect("brs instr");
-    };
-
-    ($builder:ident: $ins:ident $($arg:expr),+) => {
-        $builder.ins().$ins($($arg),+).expect("instruction addition");
-    };
-}
-
-#[allow(unused_imports)]
-pub(crate) use __instr__;
-
-#[macro_export]
-macro_rules! build_function {
-    ($(($($tree:tt)+))+) => {{
-        let isa = $crate::ssa::function::InstructionSet::Thumb;
-        let mut module = $crate::ssa::module::SsaModule::construct(isa);
-        let mut b = module.build_function(module.get_main_function()).expect("get builder");
-
-        $(
-            $crate::ssa::macros::__instr__!(b:$($tree)+);
-        )+
-
-        b.func_data.clone()
-    }};
-}
-
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __dsl_expr {
     ($b:ident,$v:ident (+ $lhs:tt $rhs:tt)) => {{
-        let a = __dsl_expr!($b,$v $lhs);
-        let b = __dsl_expr!($b,$v $rhs);
+        let a = $crate::__dsl_expr!($b,$v $lhs);
+        let b = $crate::__dsl_expr!($b,$v $rhs);
         $b.ins().add(a, b).expect("add ins")
     }};
 
     ($b:ident,$v:ident (- $lhs:tt $rhs:tt)) => {{
-        let a = __dsl_expr!($b,$v $lhs);
-        let b = __dsl_expr!($b,$v $rhs);
+        let a = $crate::__dsl_expr!($b,$v $lhs);
+        let b = $crate::__dsl_expr!($b,$v $rhs);
         $b.ins().sub(a, b).expect("sub ins")
     }};
 
@@ -95,42 +30,51 @@ macro_rules! __dsl_expr {
 
 pub use __dsl_expr;
 
+#[macro_export]
 #[doc(hidden)]
-macro_rules! __dsl_block__ {
+macro_rules! __dsl_block {
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? ($(($($in:tt)+))+)) => {
-        __dsl_block__!($b,$v $(,$lh,$lo)? $(($($in)+))+)
+        $crate::__dsl_block!($b,$v $(,$lh,$lo)? $(($($in)+))+)
     };
 
+    ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? (ret $var:ident) $($rest:tt)*) => {{
+        let var_val = $crate::__dsl_expr!($b,$v $var);
+        $b.ins().ret(Some(var_val)).expect("ret ins");
+    }};
+
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? ($($in:tt)+) $($rest:tt)+) => {
-        __dsl_stmt__!($b,$v $(,$lh,$lo)? $($in)+);
-        __dsl_block__!($b,$v $(,$lh,$lo)? $($rest)+)
+        $crate::__dsl_stmt!($b,$v $(,$lh,$lo)? $($in)+);
+        $crate::__dsl_block!($b,$v $(,$lh,$lo)? $($rest)+)
     };
 
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? ($($in:tt)+)) => {
-        __dsl_stmt__!($b,$v $(,$lh,$lo)? $($in)+)
+        $crate::__dsl_stmt!($b,$v $(,$lh,$lo)? $($in)+)
     };
 }
+
+pub use __dsl_block;
 
 #[doc(hidden)]
 macro_rules! __dsl_block2__ {
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? ($(($($in:tt)+))+)) => {
-        $(__dsl_stmt__!($b,$v $(,$lh,$lo)? $($in)+))+
+        $(__dsl_stmt!($b,$v $(,$lh,$lo)? $($in)+))+
     };
 
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? ($($in:tt)+)) => {
-        __dsl_stmt__!($b,$v $(,$lh,$lo)? $($in)+)
+        __dsl_stmt!($b,$v $(,$lh,$lo)? $($in)+)
     };
 }
 
+#[macro_export]
 #[doc(hidden)]
-macro_rules! __dsl_stmt__ {
+macro_rules! __dsl_stmt {
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? let $var:ident $expr:tt) => {{
         let var_name: &'static str = stringify!($var);
         if $v.get(&var_name).is_some() {
             panic!("variable '{var_name}' already defined");
         }
 
-        let value = __dsl_expr!($b,$v $expr);
+        let value = $crate::__dsl_expr!($b,$v $expr);
         let var = $b.declare_variable(var_name.to_string(), ValueType::Int32)
             .expect(&format!("failed to declare variable '{var_name}'"));
 
@@ -148,15 +92,15 @@ macro_rules! __dsl_stmt__ {
         let var = $v.get(&var_name)
             .copied()
             .expect(&format!("variable '{var_name}' not defined for mutation"));
-        let value = __dsl_expr!($b,$v $expr);
+        let value = $crate::__dsl_expr!($b,$v $expr);
 
         $b.define_variable(var, value)
             .expect(&format!("failed variable '{var_name}' mutation"));
     }};
 
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? if $lhs:tt $rhs:tt $thenb:tt $elseb:tt) => {{
-        let lval = __dsl_expr!($b,$v $lhs);
-        let rval = __dsl_expr!($b,$v $rhs);
+        let lval = $crate::__dsl_expr!($b,$v $lhs);
+        let rval = $crate::__dsl_expr!($b,$v $rhs);
         $b.ins().cmps(lval, rval).expect("cmps ins");
         let thenb = $b.make_block().expect("block make");
         let elseb = $b.make_block().expect("block make");
@@ -171,7 +115,7 @@ macro_rules! __dsl_stmt__ {
 
             #[allow(unused)]
             let mut vars = $v.clone();
-            __dsl_block__!($b,vars $(,$lh,$lo)? $thenb);
+            $crate::__dsl_block!($b,vars $(,$lh,$lo)? $thenb);
 
             if !$b.is_current_block_filled().expect("block filled check") {
                 $b.ins().jmp(contb).expect("jmp ins");
@@ -182,7 +126,7 @@ macro_rules! __dsl_stmt__ {
 
             #[allow(unused)]
             let mut vars = $v.clone();
-            __dsl_block__!($b,vars $(,$lh,$lo)? $elseb);
+            $crate::__dsl_block!($b,vars $(,$lh,$lo)? $elseb);
 
             if !$b.is_current_block_filled().expect("block filled check") {
                 $b.ins().jmp(contb).expect("jmp ins");
@@ -200,16 +144,17 @@ macro_rules! __dsl_stmt__ {
         $b.ins().jmp(headb).expect("jmp ins");
         $b.switch_to_block(headb).expect("block switch");
 
-        let lval = __dsl_expr!($b,$v $lhs);
-        let rval = __dsl_expr!($b,$v $rhs);
+        let lval = $crate::__dsl_expr!($b,$v $lhs);
+        let rval = $crate::__dsl_expr!($b,$v $rhs);
         $b.ins().cmps(lval, rval).expect("cmps ins");
         $b.ins().brs(instr::Cond::Equal, loopb, contb).expect("brs ins");
         $b.switch_to_block(loopb).expect("block switch");
+        $b.seal_block(loopb).expect("block seal");
 
         #[allow(unused)]
         let mut vars = $v.clone();
 
-        __dsl_block__!($b,vars,headb,contb $body);
+        $crate::__dsl_block!($b,vars,headb,contb $body);
 
         if !$b.is_current_block_filled().expect("block filled check") {
             $b.ins().jmp(headb).expect("jmp ins");
@@ -228,40 +173,32 @@ macro_rules! __dsl_stmt__ {
     };
 }
 
+pub use __dsl_stmt;
+
+#[macro_export]
 macro_rules! ssa_dsl {
     (($(($($tok:tt)+))+)) => {{
         use std::collections::HashMap;
         #[allow(unused_imports)]
-        use $crate::ssa::{self, instr, function, macros::*, module, ValueType, Variable};
+        use $crate::__private::fyrc_ssa::{
+            instr,
+            function,
+            value::ValueType,
+            variable::Variable,
+        };
 
         let isa = function::InstructionSet::Thumb;
-        let mut module = module::SsaModule::construct(isa);
+        let mut module = $crate::module::SsaModule::construct(isa);
         let mut b = module.build_function(module.get_main_function()).expect("get builder");
 
         #[allow(unused)]
         let mut vars = HashMap::<&'static str, Variable>::new();
 
-        __dsl_block__!(b,vars ($(($($tok)+))+));
+        $crate::__dsl_block!(b,vars ($(($($tok)+))+));
 
-        b.func_data.clone()
+        b.finalize().expect("finalization");
+        module.get_main_function_data()
+            .expect("main function")
+            .clone()
     }};
 }
-
-fn test() {
-    fn test_func() {}
-
-    let _data = ssa_dsl!(
-        ((let hello (+ 5 6))
-         (let never (+ 5 (- hello 7)))
-         (if hello never
-           (mut hello 7)
-           (let kello 9))
-         (while hello never
-           (if hello never
-             (while hello never
-               (let zello 9))
-             (while hello never
-               (let xello 10)))))
-    );
-}
-

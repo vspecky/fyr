@@ -1,6 +1,9 @@
 use std::fmt;
 
 use fyrc_utils::EntityId;
+use rustc_hash::FxHashMap;
+
+use crate::{instr::Instr, phi::Phi, variable::Variable};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Block(u32);
@@ -25,7 +28,7 @@ impl Default for Block {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "block_{}", self.0)
+        write!(f, "B{}", self.0)
     }
 }
 
@@ -42,12 +45,33 @@ pub enum BlockSealStatus {
     Sealed,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BlockData {
     pub predecessors: Vec<Block>,
     pub successors: Vec<Block>,
     pub phis: FxHashMap<Variable, Phi>,
-    pub instrs: Vec<instr::Instr>,
+    pub instrs: Vec<Instr>,
     pub status: BlockFillKind,
     pub sealed: BlockSealStatus,
+    pub exit: Option<Instr>,
+}
+
+impl BlockData {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self {
+            predecessors: Vec::new(),
+            successors: Vec::new(),
+            phis: FxHashMap::default(),
+            instrs: Vec::new(),
+            status: BlockFillKind::Empty,
+            sealed: BlockSealStatus::Unsealed,
+            exit: None,
+        }
+    }
+
+    #[inline]
+    pub fn is_sealed(&self) -> bool {
+        matches!(self.sealed, BlockSealStatus::Sealed)
+    }
 }

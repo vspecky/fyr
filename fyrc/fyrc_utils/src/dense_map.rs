@@ -1,8 +1,9 @@
 use std::{
-    iter::Enumerate,
+    iter::{self, Enumerate},
     marker::PhantomData,
     ops::{self, Index, IndexMut},
     slice::{Iter, IterMut},
+    vec,
 };
 
 use crate::EntityId;
@@ -133,6 +134,21 @@ where
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
+    }
+}
+
+impl<K, V> IntoIterator for DenseMap<K, V>
+where
+    K: EntityId,
+{
+    type Item = (K, V);
+    type IntoIter = iter::Map<Enumerate<vec::IntoIter<V>>, fn((usize, V)) -> (K, V)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data
+            .into_iter()
+            .enumerate()
+            .map(|(i, v)| (K::with_id(i), v))
     }
 }
 

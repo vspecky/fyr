@@ -1,13 +1,14 @@
-use rustc_hash::{FxHashSet, FxHashMap};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::EntityId;
 
-pub struct UnionFind<T> {
+pub struct SimpleUnionFind<T> {
     pub parent: FxHashMap<T, T>,
     pub rank: FxHashMap<T, u16>,
 }
 
-impl<T> UnionFind<T> {
+#[allow(clippy::new_without_default)]
+impl<T> SimpleUnionFind<T> {
     pub fn new() -> Self {
         Self {
             parent: FxHashMap::default(),
@@ -16,22 +17,15 @@ impl<T> UnionFind<T> {
     }
 }
 
-impl<T> UnionFind<T>
+impl<T> SimpleUnionFind<T>
 where
     T: EntityId + std::hash::Hash + Eq,
 {
     fn find_inner(&mut self, v: T, insert: bool) -> T {
         let parent = if insert {
-            *self
-                .parent
-                .entry(v)
-                .or_insert(v)
+            *self.parent.entry(v).or_insert(v)
         } else {
-            self
-                .parent
-                .get(&v)
-                .copied()
-                .unwrap_or(v)
+            self.parent.get(&v).copied().unwrap_or(v)
         };
 
         if v == parent {
@@ -49,6 +43,11 @@ where
         self.find_inner(v, false)
     }
 
+    #[inline]
+    pub fn add(&mut self, v: T) {
+        self.parent.insert(v, v);
+    }
+
     pub fn union(&mut self, mut v1: T, mut v2: T) {
         v1 = self.find_inner(v1, true);
         v2 = self.find_inner(v2, true);
@@ -57,15 +56,9 @@ where
             return;
         }
 
-        let mut r1 = *self
-            .rank
-            .entry(v1)
-            .or_default();
+        let mut r1 = *self.rank.entry(v1).or_default();
 
-        let mut r2 = *self
-            .rank
-            .entry(v2)
-            .or_default();
+        let mut r2 = *self.rank.entry(v2).or_default();
 
         if r1 < r2 {
             (v1, v2) = (v2, v1);
@@ -86,37 +79,21 @@ where
         let mut value_map = FxHashMap::<T, FxHashSet<T>>::default();
 
         for (child, parent) in self.parent.iter() {
-            value_map
-                .entry(*parent)
-                .or_default()
-                .insert(*child);
+            value_map.entry(*parent).or_default().insert(*child);
         }
 
         value_map.into_values().collect()
     }
 
-    pub fn get_set(&self, v: T) -> FxHashSet<T>
+    pub fn get_set(&self, v: T) -> impl Iterator<Item = T> + '_
     where
         T: std::hash::Hash + Eq,
     {
-        let my_parent = self
-            .parent
-            .get(&v)
-            .copied()
-            .unwrap_or(v);
+        let my_parent = self.parent.get(&v).copied().unwrap_or(v);
 
-        if my_parent == v {
-            return FxHashSet::from_iter([v]);
-        }
-
-        let mut set = FxHashSet::<T>::default();
-
-        for (child, his_parent) in self.parent.iter() {
-            if *his_parent == my_parent {
-                set.insert(*child);
-            }
-        }
-
-        set
+        self.parent
+            .iter()
+            .filter(move |(_, parent)| **parent == my_parent)
+            .map(|(child, _)| *child)
     }
 }

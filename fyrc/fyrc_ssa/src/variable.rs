@@ -4,7 +4,7 @@ use crate::value::ValueType;
 
 use fyrc_utils::EntityId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Variable(u32);
 
 impl EntityId for Variable {
@@ -16,12 +16,6 @@ impl EntityId for Variable {
     #[inline]
     fn with_id(idx: usize) -> Self {
         Self(idx as u32)
-    }
-}
-
-impl Default for Variable {
-    fn default() -> Self {
-        Self(0)
     }
 }
 

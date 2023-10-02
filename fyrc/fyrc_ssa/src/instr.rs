@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::{
-    ssa::{function::Function, Block, Const, ConstKind, Value, ValueType},
+    block::Block,
+    constant::{Const, ConstKind},
+    function::Function,
+    value::{Value, ValueType},
 };
 
 use fyrc_utils::EntityId;
@@ -20,12 +23,12 @@ pub enum ArgKind {
 
 impl fmt::Display for ArgKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Str(s) => &s,
-            Self::Value(val) => &val.to_string(),
-            Self::NamedValue(name, val) => &format!("{name}:{val}"),
-            Self::Block(block) => &format!("%{}", block),
-            Self::NamedBlock(name, block) => &format!("{name}:%{block}"),
+        f.write_str(&match self {
+            Self::Str(s) => s.clone(),
+            Self::Value(val) => val.to_string(),
+            Self::NamedValue(name, val) => format!("{name}:{val}"),
+            Self::Block(block) => format!("%{}", block),
+            Self::NamedBlock(name, block) => format!("{name}:%{block}"),
         })
     }
 }

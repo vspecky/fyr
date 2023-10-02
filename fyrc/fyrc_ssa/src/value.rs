@@ -2,7 +2,9 @@ use std::fmt;
 
 use fyrc_utils::EntityId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use crate::{block::Block, instr::Instr, variable::Variable};
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Value(u32);
 
 impl Value {
@@ -19,13 +21,6 @@ impl fmt::Display for Value {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ValueType {
-    Int8,
-    Int16,
-    Int32,
-}
-
 impl EntityId for Value {
     #[inline]
     fn get_id(&self) -> usize {
@@ -38,10 +33,11 @@ impl EntityId for Value {
     }
 }
 
-impl Default for Value {
-    fn default() -> Self {
-        Self(0)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueType {
+    Int8,
+    Int16,
+    Int32,
 }
 
 impl fmt::Display for ValueType {
@@ -55,5 +51,25 @@ impl fmt::Display for ValueType {
                 Self::Int32 => "i32",
             }
         )
+    }
+}
+
+#[derive(Clone)]
+pub enum ValueKind {
+    InstrRes(Instr),
+    FuncArg,
+    Phi { var: Variable, block: Block },
+    Tombstone,
+}
+
+#[derive(Clone)]
+pub struct ValueData {
+    pub value_type: ValueType,
+    pub value_kind: ValueKind,
+}
+
+impl ValueData {
+    pub fn entomb(&mut self) {
+        self.value_kind = ValueKind::Tombstone;
     }
 }

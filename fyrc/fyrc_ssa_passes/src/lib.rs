@@ -3,6 +3,7 @@ pub mod cssa_translation;
 pub mod dfs_tree;
 pub mod dominator_tree;
 pub mod error;
+pub mod global_next_use;
 pub mod interference_graph;
 pub mod liveness_analysis;
 pub mod loop_nesting_forest;
@@ -149,6 +150,10 @@ impl<'a> PassStore<'a> {
     pub fn get_func_mut(&self) -> RefMut<FunctionData> {
         self.manager.function_data.borrow_mut()
     }
+}
+
+pub(crate) trait Dependency {
+    fn ensure(manager: &mut PassManager);
 }
 
 pub mod test_utils {

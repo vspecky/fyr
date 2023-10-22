@@ -22,7 +22,7 @@ struct LoopNestingForestBuilder<'a> {
     func: &'a FunctionData,
     dfs: &'a crate::DfsTree,
     union_find: SimpleUnionFind<Block>,
-    forest: DenseMap<Block, Vec<Block>>,
+    forest: DenseMap<Block, FxHashSet<Block>>,
     roots: FxHashSet<Block>,
 }
 
@@ -48,7 +48,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
             .ok_or_else(|| report!(LoopForestError::ForestBlockNotFound))?;
 
         for loop_block in body {
-            children_list.push(loop_block);
+            children_list.insert(loop_block);
             self.union_find.union(header, loop_block);
             self.roots.remove(&loop_block);
         }
@@ -112,7 +112,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
 }
 
 pub struct LoopNestingForest {
-    pub forest: DenseMap<Block, Vec<Block>>,
+    pub forest: DenseMap<Block, FxHashSet<Block>>,
     pub top_level: FxHashSet<Block>,
 }
 

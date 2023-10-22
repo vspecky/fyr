@@ -245,3 +245,15 @@ where
         self.inner.next().map(|(id, val)| (K::with_id(id), val))
     }
 }
+
+impl<K, V> FromIterator<V> for DenseMap<K, V>
+where
+    K: EntityId,
+{
+    fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
+        Self {
+            data: Vec::from_iter(iter),
+            _marker: PhantomData,
+        }
+    }
+}

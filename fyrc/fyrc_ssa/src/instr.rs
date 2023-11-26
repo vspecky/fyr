@@ -508,8 +508,87 @@ impl SsaInstr for CopyV {
 }
 
 impl_from_instr_data!(
-    Add, Adc, Sub, Mul, Lsl, Lsr, Asl, Call, Load, Store, LoadConst, Ret, Cmp, Branch, Jump
+    Add,
+    Adc,
+    Sub,
+    Mul,
+    Lsl,
+    Lsr,
+    Asl,
+    Call,
+    Load,
+    Store,
+    LoadConst,
+    Ret,
+    Cmp,
+    Branch,
+    Jump,
+    CopyV,
+    SpillValue,
+    ReloadValue
 );
+
+#[derive(Debug, Clone)]
+pub struct SpillValue {
+    pub val: Value,
+}
+
+impl SsaInstr for SpillValue {
+    fn rewrite_value(&mut self, from: Value, to: Value) {
+        self.val.rewrite(from, to);
+    }
+
+    fn has_result(&self) -> bool {
+        false
+    }
+
+    fn is_terminal(&self) -> bool {
+        false
+    }
+
+    fn get_name(&self) -> String {
+        "spill".to_string()
+    }
+
+    fn get_args(&self) -> InstrArgs {
+        InstrArgs(vec![ArgKind::Value(self.val)])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.val]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ReloadValue {
+    pub val: Value,
+}
+
+impl SsaInstr for ReloadValue {
+    fn rewrite_value(&mut self, from: Value, to: Value) {
+        self.val.rewrite(from, to);
+    }
+
+    fn has_result(&self) -> bool {
+        false
+    }
+
+    fn is_terminal(&self) -> bool {
+        false
+    }
+
+    fn get_name(&self) -> String {
+        "spill".to_string()
+    }
+
+    fn get_args(&self) -> InstrArgs {
+        InstrArgs(vec![ArgKind::Value(self.val)])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.val]
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Instr(usize);
@@ -544,6 +623,8 @@ pub enum InstrData {
     Branch(Branch),
     Jump(Jump),
     CopyV(CopyV),
+    SpillValue(SpillValue),
+    ReloadValue(ReloadValue),
 }
 
 impl Deref for InstrData {
@@ -567,6 +648,8 @@ impl Deref for InstrData {
             Self::Branch(branch) => branch,
             Self::Jump(jump) => jump,
             Self::CopyV(copy_v) => copy_v,
+            Self::SpillValue(spill_v) => spill_v,
+            Self::ReloadValue(reload_v) => reload_v,
         }
     }
 }
@@ -590,6 +673,8 @@ impl DerefMut for InstrData {
             Self::Branch(branch) => branch,
             Self::Jump(jump) => jump,
             Self::CopyV(copy_v) => copy_v,
+            Self::SpillValue(spill_v) => spill_v,
+            Self::ReloadValue(reload_v) => reload_v,
         }
     }
 }

@@ -24,8 +24,8 @@ use std::{
 };
 
 use error_stack::{report, ResultExt};
+use fxhash::FxHashMap;
 use fyrc_ssa::function::FunctionData;
-use rustc_hash::FxHashMap;
 
 use crate::{error::PassResult, utils::RefCellExt};
 

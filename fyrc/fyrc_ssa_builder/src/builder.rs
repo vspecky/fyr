@@ -130,7 +130,8 @@ impl<'a> FunctionBuilder<'a> {
         let var = phi_data.var;
         let phi = self.phis.insert(Some(phi_data));
 
-        block_data.phis.insert(var, phi);
+        block_data.var_phi_map.insert(var, phi);
+        block_data.phis.insert(phi);
         Ok(phi)
     }
 
@@ -323,13 +324,22 @@ impl<'a> FunctionBuilder<'a> {
         Ok(if value_set.len() > 1 {
             phi_value
         } else {
-            self.func_data
+            let the_block = self
+                .func_data
                 .get_block_mut(block)
                 .change_context(BuilderError::FunctionResourceMissing)
-                .attach_printable(err)?
-                .phis
+                .attach_printable(err)?;
+
+            the_block
+                .var_phi_map
                 .remove(&var)
                 .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))
+                .attach_printable(err)?;
+
+            the_block
+                .phis
+                .remove(&the_phi)
+                .or_else_err(|| report!(BuilderError::FunctionResourceMissing))
                 .attach_printable(err)?;
 
             self.phis
@@ -396,12 +406,14 @@ impl<'a> FunctionBuilder<'a> {
                 phi_data.args.insert(block, value);
             }
 
-            self.func_data
+            let block_data = self
+                .func_data
                 .get_block_mut(block)
                 .change_context(BuilderError::FunctionResourceMissing)
-                .attach_printable(err)?
-                .phis
-                .insert(var, phi);
+                .attach_printable(err)?;
+
+            block_data.phis.insert(phi);
+            block_data.var_phi_map.insert(var, phi);
 
             self.try_remove_trivial_phi(block, var)
                 .attach_printable(err)?;
@@ -439,11 +451,22 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         for block in self.func_data.blocks.values_mut() {
-            for phi in block.phis.values_mut() {
+            for phi in block.var_phi_map.values_mut() {
                 *phi = *phi_old2new_id
                     .get(phi)
                     .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?;
             }
+
+            let mut new_set = FxHashSet::default();
+            for phi in block.phis.iter().copied() {
+                new_set.insert(
+                    *phi_old2new_id
+                        .get(&phi)
+                        .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?,
+                );
+            }
+
+            block.phis = new_set;
         }
 
         self.func_data.phis = phi_map;
@@ -993,7 +1016,10 @@ mod tests {
         );
 
         for block_data in b.func_data.blocks.values() {
-            assert!(block_data.phis.is_empty(), "expected empty block phi");
+            assert!(
+                block_data.var_phi_map.is_empty(),
+                "expected empty block phi"
+            );
         }
     }
 

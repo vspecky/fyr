@@ -1,12 +1,18 @@
 use std::fmt;
 
 use fyrc_utils::EntityId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{instr::Instr, phi::Phi, variable::Variable};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Block(u32);
+
+impl Block {
+    pub fn is_start_block(&self) -> bool {
+        self.0 == 0
+    }
+}
 
 impl EntityId for Block {
     #[inline]
@@ -49,7 +55,8 @@ pub enum BlockSealStatus {
 pub struct BlockData {
     pub predecessors: Vec<Block>,
     pub successors: Vec<Block>,
-    pub phis: FxHashMap<Variable, Phi>,
+    pub var_phi_map: FxHashMap<Variable, Phi>,
+    pub phis: FxHashSet<Phi>,
     pub instrs: Vec<Instr>,
     pub status: BlockFillKind,
     pub sealed: BlockSealStatus,
@@ -62,7 +69,8 @@ impl BlockData {
         Self {
             predecessors: Vec::new(),
             successors: Vec::new(),
-            phis: FxHashMap::default(),
+            var_phi_map: FxHashMap::default(),
+            phis: FxHashSet::default(),
             instrs: Vec::new(),
             status: BlockFillKind::Empty,
             sealed: BlockSealStatus::Unsealed,

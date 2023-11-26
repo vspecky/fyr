@@ -95,7 +95,7 @@ fn remove_critical_edges(func: &mut FunctionData) -> PassResult<(), CriticalEdge
                 .get_block_phis(succ)
                 .change_context(CriticalEdgeRemovalError::FunctionError)?;
 
-            for (_, phi) in succ_block_phis {
+            for phi in succ_block_phis {
                 let phi_data = func
                     .get_phi_data_mut(phi)
                     .change_context(CriticalEdgeRemovalError::FunctionError)?;

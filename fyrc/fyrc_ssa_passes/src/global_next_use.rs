@@ -1,9 +1,13 @@
-use std::{cmp::Ordering, collections::VecDeque, ops::Add};
+use std::{
+    cmp::Ordering,
+    collections::VecDeque,
+    ops::{Add, Sub},
+};
 
 use error_stack::{report, ResultExt};
-use fyrc_ssa::{block::Block, function::FunctionData, value::Value};
+use fxhash::{FxHashMap, FxHashSet};
+use fyrc_ssa::{block::Block, function::FunctionData, instr::Instr, value::Value};
 use fyrc_utils::DenseMap;
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::PassResult;
 
@@ -19,6 +23,8 @@ pub enum GlobalNextUseError {
     DistanceMapNotFound,
     #[error("live out set was not found for a block")]
     LiveOutSetNotFound,
+    #[error("register pressure not found for a block")]
+    RegisterPressureNotFound,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -27,10 +33,19 @@ pub enum Distance {
     Infinite,
 }
 
+impl Distance {
+    pub const ZERO: Self = Distance::Finite(0);
+
+    #[inline]
+    pub fn is_infinite(&self) -> bool {
+        matches!(self, Self::Infinite)
+    }
+}
+
 impl PartialEq for Distance {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Finite(l), Self::Finite(r)) => l.eq(&r),
+            (Self::Finite(l), Self::Finite(r)) => l.eq(r),
             (Self::Finite(_), Self::Infinite) | (Self::Infinite, Self::Finite(_)) => false,
             (Self::Infinite, Self::Infinite) => true,
         }
@@ -69,6 +84,43 @@ impl Add for Distance {
     }
 }
 
+impl Add<usize> for Distance {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: usize) -> Self::Output {
+        self + Self::Finite(rhs)
+    }
+}
+
+impl Sub for Distance {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Finite(l), Self::Finite(r)) => {
+                if l < r {
+                    Self::Infinite
+                } else {
+                    Self::Finite(l - r)
+                }
+            }
+            (Self::Finite(_), Self::Infinite)
+            | (Self::Infinite, Self::Finite(_))
+            | (Self::Infinite, Self::Infinite) => Self::Infinite,
+        }
+    }
+}
+
+impl Sub<usize> for Distance {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, rhs: usize) -> Self::Output {
+        self - Self::Finite(rhs)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ValueDistanceMap(FxHashMap<Value, Distance>);
 
@@ -101,12 +153,22 @@ impl ValueDistanceMap {
         }
     }
 
+    #[inline]
     pub fn get(&self, val: &Value) -> Distance {
         self.0.get(val).copied().unwrap_or(Distance::Infinite)
     }
 
+    pub fn get_values<T: FromIterator<Value>>(&self) -> T {
+        self.0.keys().copied().collect()
+    }
+
     #[inline]
-    fn iter(&self) -> impl Iterator<Item = (&Value, &Distance)> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (&Value, &Distance)> {
         self.0.iter()
     }
 }
@@ -180,8 +242,53 @@ fn find_loop_out_edges(
 }
 
 pub struct GlobalNextUse {
+    /// Value -> Distance Maps per block that track the nearest next use distance of all values LiveIn
+    /// to a block.
     head: DenseMap<Block, ValueDistanceMap>,
+
+    /// Value -> Distance Maps per Block that track the nearest next use distance of all values LiveOut
+    /// to a block.
     tail: DenseMap<Block, ValueDistanceMap>,
+
+    /// Value -> Distance Maps per Block that track the nearest next use distance of values defined
+    /// inside a block. Useful for tracking values that are defined in a block but are not LiveOut to
+    /// it. (def_first_use_distance_map)
+    dfused_map: DenseMap<Block, ValueDistanceMap>,
+
+    /// Value -> Distance map per Instruction that tracks the nearest next use distance of all values
+    /// used in the instruction beyond their use in the instruction. Useful for determining if a value
+    /// is still alive after a use. We use a Vec here instead of a ValueDistanceMap to conserve space.
+    subsequent_use_map: DenseMap<Instr, Vec<(Value, Distance)>>,
+
+    /// Maximum calculated register pressure per block.
+    reg_pressure: DenseMap<Block, usize>,
+}
+
+impl GlobalNextUse {
+    #[inline]
+    pub fn get_block_head_set(&self, block: Block) -> Option<&ValueDistanceMap> {
+        self.head.get(block)
+    }
+
+    #[inline]
+    pub fn get_block_tail_set(&self, block: Block) -> Option<&ValueDistanceMap> {
+        self.tail.get(block)
+    }
+
+    #[inline]
+    pub fn get_block_dfused_set(&self, block: Block) -> Option<&ValueDistanceMap> {
+        self.dfused_map.get(block)
+    }
+
+    #[inline]
+    pub fn get_instr_subsequent_use_set(&self, instr: Instr) -> Option<&Vec<(Value, Distance)>> {
+        self.subsequent_use_map.get(instr)
+    }
+
+    #[inline]
+    pub fn get_block_reg_pressure(&self, block: Block) -> Option<usize> {
+        self.reg_pressure.get(block).copied()
+    }
 }
 
 impl crate::Pass for GlobalNextUse {
@@ -235,6 +342,10 @@ impl crate::Pass for GlobalNextUse {
             .values()
             .map(|set| set.iter().copied().collect())
             .collect::<DenseMap<Block, ValueDistanceMap>>();
+        let mut dfused_map = DenseMap::<Block, ValueDistanceMap>::with_prefilled(func.blocks.len());
+        let mut subsequent_use_map =
+            DenseMap::<Instr, Vec<(Value, Distance)>>::with_prefilled(func.instrs.len());
+        let mut reg_pressure = DenseMap::with_prefilled(func.blocks.len());
 
         for block in func.blocks.keys() {
             let succ_phi_uses = func
@@ -258,6 +369,10 @@ impl crate::Pass for GlobalNextUse {
             let mut mutated = false;
 
             let tail_set = tail
+                .get_mut(block)
+                .ok_or_else(|| report!(GlobalNextUseError::DistanceMapNotFound))?;
+
+            let dfused_set = dfused_map
                 .get_mut(block)
                 .ok_or_else(|| report!(GlobalNextUseError::DistanceMapNotFound))?;
 
@@ -294,31 +409,49 @@ impl crate::Pass for GlobalNextUse {
                 .change_context(GlobalNextUseError::FunctionError)?;
 
             let mut running_map = tail_set.clone();
-            running_map
-                .0
-                .values_mut()
-                .for_each(|d| *d = *d + Distance::Finite(block_data.instrs.len()));
+            for d in running_map.0.values_mut() {
+                *d = *d + Distance::Finite(block_data.instrs.len() + block_data.phis.len());
+            }
 
+            let mut block_reg_pressure = running_map.len();
             for (distance_from_start, instr) in block_data
                 .instrs
                 .iter()
                 .copied()
                 .enumerate()
-                .map(|(d, i)| (d + 1, i))
+                .map(|(d, i)| (Distance::Finite(block_data.phis.len() + d), i))
                 .rev()
             {
                 let instr_uses = func
                     .get_instr_uses(instr)
                     .change_context(GlobalNextUseError::FunctionError)?;
 
+                let subsequent_use_set = subsequent_use_map
+                    .get_mut(instr)
+                    .ok_or_else(|| report!(GlobalNextUseError::DistanceMapNotFound))?;
+
+                *subsequent_use_set = instr_uses
+                    .iter()
+                    .map(|val| (*val, running_map.get(val) - distance_from_start))
+                    .collect();
+
                 for instr_use in instr_uses {
-                    running_map.insert(instr_use, Distance::Finite(distance_from_start));
+                    running_map.insert(instr_use, distance_from_start);
                 }
 
                 if let Some(def) = func.get_instr_def(instr) {
+                    dfused_set.insert(def, running_map.get(&def) - distance_from_start);
                     running_map.remove(&def);
                 }
+
+                block_reg_pressure = std::cmp::max(block_reg_pressure, running_map.len());
             }
+
+            let total_pressure = reg_pressure
+                .get_mut(block)
+                .ok_or_else(|| report!(GlobalNextUseError::RegisterPressureNotFound))?;
+
+            *total_pressure = std::cmp::max(*total_pressure, block_reg_pressure);
 
             let head_set = head
                 .get_mut(block)
@@ -342,7 +475,13 @@ impl crate::Pass for GlobalNextUse {
             }
         }
 
-        Ok(Self { head, tail })
+        Ok(Self {
+            head,
+            tail,
+            dfused_map,
+            subsequent_use_map,
+            reg_pressure,
+        })
     }
 }
 

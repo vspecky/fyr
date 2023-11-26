@@ -1,7 +1,7 @@
 use error_stack::{report, ResultExt};
+use fxhash::FxHashSet;
 use fyrc_ssa::{block::Block, function::FunctionData};
 use fyrc_utils::{BoolExt, DenseMap};
-use rustc_hash::FxHashSet;
 
 use crate::error::PassResult;
 

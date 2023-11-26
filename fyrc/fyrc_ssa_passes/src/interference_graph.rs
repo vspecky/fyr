@@ -1,5 +1,5 @@
 use error_stack::ResultExt;
-use rustc_hash::FxHashSet;
+use fxhash::FxHashSet;
 
 use fyrc_ssa::{function::FunctionData, value::Value};
 use fyrc_utils::EntityId;

@@ -29,7 +29,7 @@ impl crate::function::FunctionData {
             }
         }
 
-        for phi in block_data.phis.values() {
+        for phi in block_data.var_phi_map.values() {
             let phi_data = self.get_phi_data(*phi)?;
             let value_data = self
                 .get_value(phi_data.value)

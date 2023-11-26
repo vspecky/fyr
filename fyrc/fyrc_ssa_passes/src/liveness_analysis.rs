@@ -1,5 +1,5 @@
 use error_stack::{report, ResultExt};
-use rustc_hash::FxHashSet;
+use fxhash::FxHashSet;
 
 use fyrc_ssa::{block::Block, function::FunctionData, value::Value};
 use fyrc_utils::{BoolExt, DenseMap};

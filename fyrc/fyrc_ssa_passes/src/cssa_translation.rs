@@ -1,4 +1,5 @@
 use error_stack::{report, ResultExt};
+use fxhash::{FxHashMap, FxHashSet};
 use fyrc_ssa::{
     block::Block,
     function::FunctionData,
@@ -6,7 +7,6 @@ use fyrc_ssa::{
     value::{Value, ValueData, ValueKind},
 };
 use fyrc_utils::SimpleUnionFind;
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::PassResult;
 
@@ -54,7 +54,7 @@ impl<'a> CssaTranslationInner<'a> {
                 .get_block_phis(block)
                 .change_context(CssaTranslationError::FunctionError)?;
 
-            for (_, phi) in block_phis {
+            for phi in block_phis {
                 let phi_data = self
                     .func
                     .get_phi_data(phi)
@@ -78,7 +78,7 @@ impl<'a> CssaTranslationInner<'a> {
                 .get_block_phis(block)
                 .change_context(CssaTranslationError::FunctionError)?;
 
-            for (_, phi) in block_phis {
+            for phi in block_phis {
                 let mut candidates = FxHashSet::<LabeledValue>::default();
                 let mut unresolved_neighbors: FxHashMap<LabeledValue, FxHashSet<LabeledValue>> =
                     FxHashMap::default();
@@ -432,7 +432,7 @@ mod tests {
         for block in func_data.blocks.keys() {
             let block_phis = func_data.get_block_phis(block).expect("block phis");
 
-            for (_, phi) in block_phis {
+            for phi in block_phis {
                 let phi_data = func_data.get_phi_data(phi).expect("phi data");
 
                 let mut to_check: Vec<Value> = phi_data.args.iter().map(|(_, &v)| v).collect();

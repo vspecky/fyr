@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use error_stack::{report, ResultExt};
-use rustc_hash::FxHashSet;
+use fxhash::FxHashSet;
 
 use fyrc_ssa::{block::Block, function::FunctionData};
 use fyrc_utils::{DenseMap, SimpleUnionFind};
@@ -105,6 +105,12 @@ impl<'a> LoopNestingForestBuilder<'a> {
         }
 
         Ok(LoopNestingForest {
+            all_loop_headers: self
+                .forest
+                .iter()
+                .filter(|(_, children)| !children.is_empty())
+                .map(|(block, _)| block)
+                .collect(),
             forest: self.forest,
             top_level: self.roots,
         })
@@ -114,6 +120,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
 pub struct LoopNestingForest {
     pub forest: DenseMap<Block, FxHashSet<Block>>,
     pub top_level: FxHashSet<Block>,
+    pub all_loop_headers: FxHashSet<Block>,
 }
 
 impl crate::Pass for LoopNestingForest {

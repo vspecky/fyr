@@ -2,7 +2,7 @@ use std::fmt;
 
 use error_stack::report;
 use fyrc_utils::{DenseMap, EntityId};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     block::{Block, BlockData, BlockSealStatus},
@@ -57,6 +57,7 @@ pub struct Signature {
 #[derive(Clone)]
 pub struct FunctionData {
     pub signature: Signature,
+    pub arg_values: Vec<Value>,
     pub blocks: DenseMap<Block, BlockData>,
     pub consts: DenseMap<Const, ConstKind>,
     pub instrs: DenseMap<Instr, InstrData>,
@@ -85,6 +86,7 @@ impl FunctionData {
         let mut variables: DenseMap<Variable, VariableData> = DenseMap::new();
         let mut var_defs: FxHashMap<Variable, FxHashMap<Block, Value>> = FxHashMap::default();
         let mut blocks: DenseMap<Block, BlockData> = DenseMap::new();
+        let mut arg_values = Vec::with_capacity(sig.args.len());
 
         let mut block_data = BlockData::new();
         block_data.sealed = BlockSealStatus::Sealed;
@@ -96,11 +98,13 @@ impl FunctionData {
                 value_kind: ValueKind::FuncArg,
             });
 
+            arg_values.push(val);
             var_defs.insert(var, FxHashMap::from_iter([(block, val)]));
         }
 
         Self {
             signature: sig,
+            arg_values,
             blocks,
             consts: DenseMap::new(),
             instrs: DenseMap::new(),
@@ -132,13 +136,8 @@ impl FunctionData {
         Ok(self.get_block(block)?.successors.clone())
     }
 
-    pub fn get_block_phis(&self, block: Block) -> SsaResult<Vec<(Variable, Phi)>> {
-        Ok(self
-            .get_block(block)?
-            .phis
-            .iter()
-            .map(|(&v, &p)| (v, p))
-            .collect())
+    pub fn get_block_phis(&self, block: Block) -> SsaResult<FxHashSet<Phi>> {
+        Ok(self.get_block(block)?.phis.clone())
     }
 
     pub fn get_value(&self, value: Value) -> SsaResult<&ValueData> {
@@ -179,7 +178,7 @@ impl FunctionData {
 
     pub fn get_phi_by_block_var(&self, block: Block, var: Variable) -> SsaResult<Phi> {
         self.get_block(block)?
-            .phis
+            .var_phi_map
             .get(&var)
             .copied()
             .ok_or_else(|| report!(SsaError::PhiNotFound))
@@ -219,7 +218,7 @@ impl FunctionData {
             .map(|block_data| {
                 Ok(block_data
                     .phis
-                    .values()
+                    .iter()
                     .copied()
                     .map(|phi| self.get_phi_data(phi))
                     .collect::<SsaResult<Vec<_>>>()?
@@ -243,7 +242,7 @@ impl FunctionData {
     pub fn get_phi_defs(&self, block: Block) -> SsaResult<Vec<Value>> {
         let data = self.get_block(block)?;
         data.phis
-            .values()
+            .iter()
             .copied()
             .map(|phi| self.get_phi_data(phi).map(|p| p.value))
             .collect()
@@ -284,7 +283,7 @@ impl FunctionData {
             outwrite!(out, "  {block}:\n");
             first = false;
 
-            for phi in block_data.phis.values() {
+            for phi in block_data.var_phi_map.values() {
                 let phi_data = self.get_phi_data(*phi)?;
                 let value_data = self.get_value(phi_data.value)?;
                 let var_data = self.get_var(phi_data.var)?;

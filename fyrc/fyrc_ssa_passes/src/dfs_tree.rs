@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use error_stack::{report, ResultExt};
-use rustc_hash::{FxHashMap, FxHashSet};
+use fxhash::{FxHashMap, FxHashSet};
 
 use fyrc_ssa::{block::Block, function::FunctionData};
 use fyrc_utils::{DenseMap, EntityId};

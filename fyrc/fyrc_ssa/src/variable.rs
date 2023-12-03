@@ -7,6 +7,10 @@ use fyrc_utils::EntityId;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Variable(u32);
 
+impl Variable {
+    pub const NONE: Self = Self(u32::MAX);
+}
+
 impl EntityId for Variable {
     #[inline]
     fn get_id(&self) -> usize {

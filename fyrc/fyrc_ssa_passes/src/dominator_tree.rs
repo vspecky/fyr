@@ -1,12 +1,20 @@
+use std::collections::VecDeque;
+
 use error_stack::{report, ResultExt};
+use fxhash::FxHashSet;
 use fyrc_ssa::{block::Block, function::FunctionData};
-use fyrc_utils::{BoolExt, DenseMap};
-use rustc_hash::FxHashSet;
+use fyrc_utils::{BoolExt, DenseMap, EntityId};
 
 use crate::error::PassResult;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DominatorTreeError {
+    #[error("strict dominator set not found for block")]
+    StrictDominatorSetNotFound,
+    #[error("dominator tree level not found in block")]
+    BlockLevelNotFound,
+    #[error("dominator children not found for node")]
+    ChildrenNotFound,
     #[error("failed a dependent pass for 'dominator_tree'")]
     DependentPassFailure,
     #[error("could not find ancestor for node")]
@@ -15,6 +23,8 @@ pub enum DominatorTreeError {
     SemiNotFound,
     #[error("could not find label for node")]
     LabelNotFound,
+    #[error("level to blocks map not found")]
+    LevelBlocksMapNotFound,
     #[error("could not find block with the given number")]
     VertexNotFound,
     #[error("could not find bucket for the given block")]
@@ -29,9 +39,31 @@ pub enum DominatorTreeError {
     DominatorBlockNotFound,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Level(usize);
+
+impl Level {
+    pub const ZERO: Self = Self(0);
+}
+
+impl EntityId for Level {
+    #[inline]
+    fn get_id(&self) -> usize {
+        self.0
+    }
+
+    #[inline]
+    fn with_id(idx: usize) -> Self {
+        Self(idx)
+    }
+}
+
 pub struct DominatorTree {
     pub tree: DenseMap<Block, FxHashSet<Block>>,
     pub parent: DenseMap<Block, Block>,
+    pub sdom: DenseMap<Block, FxHashSet<Block>>,
+    pub block_levels: DenseMap<Block, Level>,
+    pub level_blocks: DenseMap<Level, FxHashSet<Block>>,
 }
 
 struct DominatorTreeBuilder<'a> {
@@ -251,9 +283,53 @@ impl<'a> DominatorTreeBuilder<'a> {
             children.remove(&parent);
         }
 
+        let mut sdom: DenseMap<Block, FxHashSet<Block>> =
+            DenseMap::with_prefilled(self.func.blocks.len());
+        let mut block_levels = DenseMap::with_prefilled(self.func.blocks.len());
+        let mut level_blocks = DenseMap::new();
+
+        let mut queue = VecDeque::new();
+        queue.push_back((Block::START, Level::ZERO));
+
+        while let Some((block, level)) = queue.pop_front() {
+            block_levels
+                .set(block, level)
+                .or_else_err(|| report!(DominatorTreeError::BlockLevelNotFound))?;
+
+            if !level_blocks.contains(&level) {
+                level_blocks.insert(FxHashSet::default());
+            }
+
+            level_blocks
+                .get_mut(level)
+                .ok_or_else(|| report!(DominatorTreeError::LevelBlocksMapNotFound))?
+                .insert(block);
+
+            let mut my_sdom_set = sdom
+                .get(block)
+                .ok_or_else(|| report!(DominatorTreeError::StrictDominatorSetNotFound))?
+                .clone();
+            my_sdom_set.insert(block);
+
+            let dom_children = tree
+                .get(block)
+                .ok_or_else(|| report!(DominatorTreeError::ChildrenNotFound))?;
+
+            let next_level = Level::with_id(level.get_id() + 1);
+            for &child in dom_children {
+                sdom.set(child, my_sdom_set.clone())
+                    .or_else_err(|| report!(DominatorTreeError::StrictDominatorSetNotFound))?;
+
+                queue.push_back((child, next_level));
+            }
+        }
+
         Ok(DominatorTree {
             tree,
             parent: self.dom,
+            sdom,
+            block_levels,
+            level_blocks,
         })
     }
 }

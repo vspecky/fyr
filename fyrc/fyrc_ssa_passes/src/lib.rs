@@ -1,8 +1,10 @@
 pub mod critical_edge_removal;
 pub mod cssa_translation;
+pub mod def_use;
 pub mod dfs_tree;
 pub mod dominator_tree;
 pub mod error;
+pub mod global_next_use;
 pub mod interference_graph;
 pub mod liveness_analysis;
 pub mod loop_nesting_forest;
@@ -10,8 +12,10 @@ pub mod utils;
 
 pub use critical_edge_removal::CriticalEdgeRemoval;
 pub use cssa_translation::CssaTranslation;
+pub use def_use::DefUse;
 pub use dfs_tree::DfsTree;
 pub use dominator_tree::DominatorTree;
+pub use global_next_use::GlobalNextUse;
 pub use interference_graph::InterferenceGraph;
 pub use liveness_analysis::LivenessAnalysis;
 pub use loop_nesting_forest::LoopNestingForest;
@@ -22,8 +26,8 @@ use std::{
 };
 
 use error_stack::{report, ResultExt};
+use fxhash::FxHashMap;
 use fyrc_ssa::function::FunctionData;
-use rustc_hash::FxHashMap;
 
 use crate::{error::PassResult, utils::RefCellExt};
 
@@ -151,6 +155,10 @@ impl<'a> PassStore<'a> {
     }
 }
 
+pub(crate) trait Dependency {
+    fn ensure(manager: &mut PassManager);
+}
+
 pub mod test_utils {
     use super::*;
 
@@ -194,6 +202,9 @@ pub mod test_utils {
         (A)
         (A, B)
         (A, B, C)
+        (A, B, C, D)
+        (A, B, C, D, E)
+        (A, B, C, D, E, F)
     }
 
     pub fn get_pass<T: MultiPass + 'static>(func: FunctionData) -> (T, FunctionData) {

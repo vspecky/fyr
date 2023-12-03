@@ -11,5 +11,5 @@ fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
 
 # Third party
 error-stack = "0.4.0"
-rustc-hash = "1.1.0"
+fxhash = "0.2.1"
 thiserror = "1.0.47"

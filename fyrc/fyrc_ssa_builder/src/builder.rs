@@ -1,4 +1,5 @@
 use error_stack::{report, ResultExt};
+use fxhash::{FxHashMap, FxHashSet};
 use fyrc_ssa::{
     block::{Block, BlockData, BlockFillKind, BlockSealStatus},
     constant::{Const, ConstKind},
@@ -9,7 +10,6 @@ use fyrc_ssa::{
     variable::{Variable, VariableData},
 };
 use fyrc_utils::{BoolExt, DenseMap};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     error::{BuilderError, BuilderResult},
@@ -120,6 +120,7 @@ impl<'a> FunctionBuilder<'a> {
         Ok(())
     }
 
+    /// Insert a phi into the function builder as well as a block
     fn insert_block_phi(&mut self, block: Block, phi_data: PhiData) -> BuilderResult<Phi> {
         let block_data = self
             .func_data
@@ -130,7 +131,8 @@ impl<'a> FunctionBuilder<'a> {
         let var = phi_data.var;
         let phi = self.phis.insert(Some(phi_data));
 
-        block_data.phis.insert(var, phi);
+        block_data.var_phi_map.insert(var, phi);
+        block_data.phis.insert(phi);
         Ok(phi)
     }
 
@@ -180,13 +182,16 @@ impl<'a> FunctionBuilder<'a> {
         Ok(self.func_data.blocks.insert(BlockData::new()))
     }
 
+    /// Switch instruction insertion to another block
     pub fn switch_to_block(&mut self, block: Block) -> BuilderResult<()> {
         let err = "when trying to switch blocks";
+        // we cannot switch out of a block until it is filled
         self.is_current_block_filled()
             .attach_printable(err)?
             .or_else_err(|| report!(BuilderError::BlockNotFilled))
             .attach_printable("cannot move out of empty/partially-filled block")?;
 
+        // we can only switch to empty blocks
         self.is_block_empty(block)
             .attach_printable(err)?
             .or_else_err(|| report!(BuilderError::BlockNotEmpty))
@@ -239,21 +244,29 @@ impl<'a> FunctionBuilder<'a> {
             .attach_printable(err)?
             .get(&block);
 
+        // if the block already has a definition of the variable, just return that
         if let Some(value) = local_value {
             return Ok(*value);
         }
 
+        // if the block is not sealed, it may have more predecessors added in the future (for
+        // example, in loops) so we cannot decide on a definition for the variable right now.
+        // We instead create an empty phi and register it as the definition of the variable in
+        // this block. The arguments for the phi will be derived from the predecessors when the
+        // block is sealed.
         if !self.is_block_sealed(block).attach_printable(err)? {
             let var_type = self.get_variable_type(var).attach_printable(err)?;
             let phi_value = self.func_data.values.insert(ValueData {
                 value_type: var_type,
-                value_kind: ValueKind::Phi { var, block },
+                value_kind: ValueKind::Phi(self.phis.next_key()),
+                is_mem: false,
             });
             let phi_data = PhiData {
                 var,
                 block,
                 value: phi_value,
                 args: FxHashMap::default(),
+                is_mem: false,
             };
 
             let phi = self.phis.insert(Some(phi_data));
@@ -271,31 +284,42 @@ impl<'a> FunctionBuilder<'a> {
 
         let preds = self.get_block_preds(block).attach_printable(err)?.to_vec();
 
-        Ok(if preds.len() == 1 {
-            self.read_variable(var, preds[0])?
+        Ok(if let &[single_pred] = &preds[..] {
+            // if the block is sealed and a single predecessor, we recursively query the single
+            // predecessor for the definition of the variable.
+            self.read_variable(var, single_pred)?
         } else {
+            // if the block is sealed and has more than one predecessor, we cannot be sure that every
+            // branch coming into the block has the same definition of the variable so we insert a
+            // phi and fill the arguments of the phi based on the predecessors. If the phi is redundant,
+            // we detect it and remove it in a separate pass going forward.
             let var_type = self.get_variable_type(var).attach_printable(err)?;
 
             let phi_value = self.func_data.values.insert(ValueData {
                 value_type: var_type,
-                value_kind: ValueKind::Phi { var, block },
+                value_kind: ValueKind::Phi(self.phis.next_key()),
+                is_mem: false,
             });
 
-            let mut phi = PhiData {
+            let phi_data = PhiData {
                 var,
                 block,
                 value: phi_value,
                 args: FxHashMap::default(),
+                is_mem: false,
             };
+
+            let phi = self
+                .insert_block_phi(block, phi_data)
+                .attach_printable(err)?;
+            self.write_variable(block, var, phi_value)
+                .attach_printable(err)?;
 
             for pred in preds {
                 let value = self.read_variable(var, pred)?;
-                phi.args.insert(pred, value);
+                let phi_data = self.get_phi_data_mut(phi).attach_printable(err)?;
+                phi_data.args.insert(pred, value);
             }
-
-            self.insert_block_phi(block, phi).attach_printable(err)?;
-            self.write_variable(block, var, phi_value)
-                .attach_printable(err)?;
 
             self.try_remove_trivial_phi(block, var)?
         })
@@ -306,6 +330,8 @@ impl<'a> FunctionBuilder<'a> {
         self.read_variable(var, self.current_block)
     }
 
+    /// Check if a phi is trivial and remove it. A phi is trivial if it's reconciling virtually the same
+    /// value (i.e. itself and some other value).
     fn try_remove_trivial_phi(&mut self, block: Block, var: Variable) -> BuilderResult<Value> {
         let err = "when trying to remove trivial phi";
         let the_phi = self
@@ -321,15 +347,26 @@ impl<'a> FunctionBuilder<'a> {
         value_set.remove(&phi_value);
 
         Ok(if value_set.len() > 1 {
+            // if the phi has more than one value other than possibly itself, then its not trivial,
+            // return the phi value as the definition of the variable in this block.
             phi_value
         } else {
-            self.func_data
+            let the_block = self
+                .func_data
                 .get_block_mut(block)
                 .change_context(BuilderError::FunctionResourceMissing)
-                .attach_printable(err)?
-                .phis
+                .attach_printable(err)?;
+
+            the_block
+                .var_phi_map
                 .remove(&var)
                 .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))
+                .attach_printable(err)?;
+
+            the_block
+                .phis
+                .remove(&the_phi)
+                .or_else_err(|| report!(BuilderError::FunctionResourceMissing))
                 .attach_printable(err)?;
 
             self.phis
@@ -348,6 +385,18 @@ impl<'a> FunctionBuilder<'a> {
                 .copied()
                 .ok_or_else(|| report!(BuilderError::PhiEmpty))
                 .attach_printable(err)?;
+
+            let block_defs = self
+                .func_data
+                .get_var_def_mut(var)
+                .change_context(BuilderError::FunctionResourceMissing)
+                .attach_printable(err)?;
+
+            if let Some(def) = block_defs.get(&block).copied() {
+                if def == phi_value {
+                    block_defs.remove(&block);
+                }
+            }
 
             for instr_data in self.func_data.instrs.values_mut() {
                 instr_data.rewrite_value(phi_value, replace_to);
@@ -396,12 +445,14 @@ impl<'a> FunctionBuilder<'a> {
                 phi_data.args.insert(block, value);
             }
 
-            self.func_data
+            let block_data = self
+                .func_data
                 .get_block_mut(block)
                 .change_context(BuilderError::FunctionResourceMissing)
-                .attach_printable(err)?
-                .phis
-                .insert(var, phi);
+                .attach_printable(err)?;
+
+            block_data.phis.insert(phi);
+            block_data.var_phi_map.insert(var, phi);
 
             self.try_remove_trivial_phi(block, var)
                 .attach_printable(err)?;
@@ -439,10 +490,38 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         for block in self.func_data.blocks.values_mut() {
-            for phi in block.phis.values_mut() {
+            for phi in block.var_phi_map.values_mut() {
                 *phi = *phi_old2new_id
                     .get(phi)
                     .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?;
+            }
+
+            let mut new_set = FxHashSet::default();
+            for phi in block.phis.iter().copied() {
+                new_set.insert(
+                    *phi_old2new_id
+                        .get(&phi)
+                        .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?,
+                );
+            }
+
+            block.phis = new_set;
+        }
+
+        for value in self.func_data.values.values_mut() {
+            match &mut value.value_kind {
+                ValueKind::Phi(phi) => {
+                    *phi = *phi_old2new_id
+                        .get(phi)
+                        .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?;
+                }
+                ValueKind::MemPhi(phi) => {
+                    *phi = *phi_old2new_id
+                        .get(phi)
+                        .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?;
+                }
+
+                _ => {}
             }
         }
 
@@ -515,13 +594,12 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
                 .set_current_block_filled()
                 .attach_printable(err)?;
             let block = self.builder.get_current_block_mut().attach_printable(err)?;
-            block.exit = Some(instr);
+            block.exit = instr;
         } else {
             self.builder
                 .get_current_block_mut()
                 .attach_printable(err)?
-                .instrs
-                .push(instr);
+                .append_instr(instr);
         }
 
         if self
@@ -545,6 +623,7 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
             let value = self.builder.func_data.values.insert(ValueData {
                 value_type: res_type,
                 value_kind: ValueKind::InstrRes(instr),
+                is_mem: false,
             });
             self.builder.func_data.results.insert(instr, value);
             Some(value)
@@ -993,7 +1072,10 @@ mod tests {
         );
 
         for block_data in b.func_data.blocks.values() {
-            assert!(block_data.phis.is_empty(), "expected empty block phi");
+            assert!(
+                block_data.var_phi_map.is_empty(),
+                "expected empty block phi"
+            );
         }
     }
 

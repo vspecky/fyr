@@ -1,12 +1,20 @@
 use std::fmt;
 
+use fxhash::{FxHashMap, FxHashSet};
 use fyrc_utils::EntityId;
-use rustc_hash::FxHashMap;
 
 use crate::{instr::Instr, phi::Phi, variable::Variable};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Block(u32);
+
+impl Block {
+    pub const START: Self = Self(0);
+
+    pub fn is_start_block(&self) -> bool {
+        self.0 == 0
+    }
+}
 
 impl EntityId for Block {
     #[inline]
@@ -49,11 +57,12 @@ pub enum BlockSealStatus {
 pub struct BlockData {
     pub predecessors: Vec<Block>,
     pub successors: Vec<Block>,
-    pub phis: FxHashMap<Variable, Phi>,
-    pub instrs: Vec<Instr>,
+    pub var_phi_map: FxHashMap<Variable, Phi>,
+    pub phis: FxHashSet<Phi>,
+    instrs: Vec<Instr>,
     pub status: BlockFillKind,
     pub sealed: BlockSealStatus,
-    pub exit: Option<Instr>,
+    pub exit: Instr,
 }
 
 impl BlockData {
@@ -62,16 +71,47 @@ impl BlockData {
         Self {
             predecessors: Vec::new(),
             successors: Vec::new(),
-            phis: FxHashMap::default(),
+            var_phi_map: FxHashMap::default(),
+            phis: FxHashSet::default(),
             instrs: Vec::new(),
             status: BlockFillKind::Empty,
             sealed: BlockSealStatus::Unsealed,
-            exit: None,
+            exit: Instr::NOP,
         }
     }
 
     #[inline]
     pub fn is_sealed(&self) -> bool {
         matches!(self.sealed, BlockSealStatus::Sealed)
+    }
+
+    pub fn len(&self) -> usize {
+        self.instrs.len().saturating_add(1)
+    }
+
+    pub fn iter_instr(&self) -> impl Iterator<Item = Instr> + '_ {
+        self.instrs
+            .iter()
+            .copied()
+            .chain(std::iter::once(self.exit))
+    }
+
+    pub fn iter_instr_rev(&self) -> impl Iterator<Item = Instr> + '_ {
+        std::iter::once(self.exit).chain(self.instrs.iter().rev().copied())
+    }
+
+    pub fn append_instr(&mut self, ins: Instr) {
+        self.instrs.push(ins);
+    }
+
+    pub fn prepend_instr(&mut self, ins: Instr) {
+        self.instrs.insert(0, ins);
+    }
+
+    pub fn set_instrs(&mut self, mut instrs: Vec<Instr>) {
+        if let Some(exit) = instrs.pop() {
+            self.exit = exit;
+        }
+        self.instrs = instrs;
     }
 }

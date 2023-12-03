@@ -1,6 +1,6 @@
 use crate::{Block, Value, Variable};
 
-use rustc_hash::FxHashMap;
+use fxhash::FxHashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Phi(usize);
@@ -23,12 +23,13 @@ pub struct PhiData {
     pub var: Variable,
     pub value: Value,
     pub args: FxHashMap<Block, Value>,
+    pub is_mem: bool,
 }
 
 impl PhiData {
     pub fn rewrite_arg(&mut self, from: Value, to: Value) -> bool {
         let mut rewritten: bool = false;
-        for (_, arg) in self.args.iter_mut() {
+        for arg in self.args.values_mut() {
             if *arg == from {
                 *arg = to;
                 rewritten = true;

@@ -1,10 +1,10 @@
 use error_stack::{report, ResultExt};
+use fxhash::FxHashMap;
 use fyrc_ssa::{
     block::Block,
     function::{Function, FunctionData, InstructionSet, Signature},
 };
 use fyrc_utils::{BoolExt, DenseMap};
-use rustc_hash::FxHashMap;
 
 use crate::{
     builder::FunctionBuilder,

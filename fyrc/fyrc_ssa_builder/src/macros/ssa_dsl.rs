@@ -33,6 +33,8 @@ pub use __dsl_expr;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __dsl_block {
+    ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? ()) => {};
+
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? ($(($($in:tt)+))+)) => {
         $crate::__dsl_block!($b,$v $(,$lh,$lo)? $(($($in)+))+)
     };

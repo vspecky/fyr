@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use error_stack::{report, ResultExt};
-use rustc_hash::{FxHashMap, FxHashSet};
+use fxhash::{FxHashMap, FxHashSet};
 
 use fyrc_ssa::{block::Block, function::FunctionData};
 use fyrc_utils::{DenseMap, EntityId};
@@ -10,6 +10,8 @@ use crate::error::PassResult;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DfsTreeError {
+    #[error("dfs children of block not found")]
+    ChildrenNotFound,
     #[error("a dependency pass failed for 'dfs_tree'")]
     DependentPassFailed,
     #[error("there was an error when interacting with the function data")]
@@ -63,6 +65,23 @@ impl BlockIndexVec {
     }
 }
 
+fn postorder(
+    tree: &DenseMap<Block, Vec<Block>>,
+    order: &mut Vec<Block>,
+    block: Block,
+) -> PassResult<(), DfsTreeError> {
+    let children = tree
+        .get(block)
+        .ok_or_else(|| report!(DfsTreeError::ChildrenNotFound))?;
+
+    for &child in children {
+        postorder(tree, order, child)?;
+    }
+
+    order.push(block);
+    Ok(())
+}
+
 pub struct DfsTree {
     pub tree: DenseMap<Block, Vec<Block>>,
     pub back_edges: FxHashSet<(Block, Block)>,
@@ -81,10 +100,8 @@ impl DfsTree {
         let mut parents: DenseMap<Block, Block> = DenseMap::with_prefilled(func.blocks.len());
         let mut idx_map = BlockIndexVec::new();
         let mut back_edges: FxHashSet<(Block, Block)> = FxHashSet::default();
-        let mut rev_postorder: Vec<Block> = Vec::new();
         visited.insert(first_block);
         idx_map.push(first_block);
-        rev_postorder.push(first_block);
 
         for succ in func
             .get_block_succs(first_block)
@@ -105,7 +122,6 @@ impl DfsTree {
             parents.set(next_block, pred);
             visited.insert(next_block);
             idx_map.push(next_block);
-            rev_postorder.push(next_block);
 
             res_map
                 .get_mut(pred)
@@ -139,12 +155,15 @@ impl DfsTree {
             }
         }
 
+        let mut post_order = Vec::new();
+        postorder(&res_map, &mut post_order, Block::START)?;
+
         Ok(Self {
             tree: res_map,
             parents,
             back_edges,
             preorder,
-            postorder: rev_postorder.into_iter().rev().collect(),
+            postorder: post_order,
         })
     }
 

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use error_stack::{report, ResultExt};
-use rustc_hash::FxHashSet;
+use fxhash::FxHashSet;
 
 use fyrc_ssa::{block::Block, function::FunctionData};
 use fyrc_utils::{DenseMap, SimpleUnionFind};
@@ -22,7 +22,7 @@ struct LoopNestingForestBuilder<'a> {
     func: &'a FunctionData,
     dfs: &'a crate::DfsTree,
     union_find: SimpleUnionFind<Block>,
-    forest: DenseMap<Block, Vec<Block>>,
+    forest: DenseMap<Block, FxHashSet<Block>>,
     roots: FxHashSet<Block>,
 }
 
@@ -48,7 +48,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
             .ok_or_else(|| report!(LoopForestError::ForestBlockNotFound))?;
 
         for loop_block in body {
-            children_list.push(loop_block);
+            children_list.insert(loop_block);
             self.union_find.union(header, loop_block);
             self.roots.remove(&loop_block);
         }
@@ -105,6 +105,12 @@ impl<'a> LoopNestingForestBuilder<'a> {
         }
 
         Ok(LoopNestingForest {
+            all_loop_headers: self
+                .forest
+                .iter()
+                .filter(|(_, children)| !children.is_empty())
+                .map(|(block, _)| block)
+                .collect(),
             forest: self.forest,
             top_level: self.roots,
         })
@@ -112,8 +118,9 @@ impl<'a> LoopNestingForestBuilder<'a> {
 }
 
 pub struct LoopNestingForest {
-    pub forest: DenseMap<Block, Vec<Block>>,
+    pub forest: DenseMap<Block, FxHashSet<Block>>,
     pub top_level: FxHashSet<Block>,
+    pub all_loop_headers: FxHashSet<Block>,
 }
 
 impl crate::Pass for LoopNestingForest {

@@ -1,11 +1,13 @@
 use error_stack::ResultExt;
+use fxhash::FxHashMap;
 use fyrc_utils::EntityId;
-use rustc_hash::FxHashMap;
 
 use crate::{
     block::{Block, BlockData},
     error::SsaResult,
-    instr::InstrData,
+    instr::{ArgKind, InstrData},
+    phi::PhiData,
+    value::{Value, ValueData},
 };
 
 enum BlockEnd {
@@ -29,41 +31,66 @@ impl crate::function::FunctionData {
             }
         }
 
-        for phi in block_data.phis.values() {
+        let get_phi_symbol = |data: &PhiData| if data.is_mem { "φ" } else { "Φ" };
+        let get_value_repr = |value: Value, data: &ValueData| {
+            if data.is_mem {
+                format!("&{}", value.get_id())
+            } else {
+                format!("${}", value.get_id())
+            }
+        };
+
+        for phi in block_data.phis.iter() {
             let phi_data = self.get_phi_data(*phi)?;
             let value_data = self
                 .get_value(phi_data.value)
                 .attach_printable("while constructing phi row")?;
-            let var_data = self
+            let var_name = self
                 .get_var(phi_data.var)
-                .attach_printable("while constructing phi row")?;
-            let args: Vec<String> = phi_data
-                .args
-                .iter()
-                .map(|(b, v)| format!("{}:B{}", v, b.get_id()))
-                .collect();
+                .map_or(String::new(), |var_data| {
+                    format!("({})", var_data.name.clone())
+                });
+
+            let mut args = Vec::new();
+            for (&arg_block, &arg_val) in phi_data.args.iter() {
+                let arg_val_data = self
+                    .get_value(arg_val)
+                    .attach_printable("while constructing phi row")?;
+
+                args.push(format!(
+                    "{}:B{}",
+                    get_value_repr(arg_val, arg_val_data),
+                    arg_block.get_id()
+                ));
+            }
 
             rows.push(format!(
-                "{}:{}({}) = Φ({})",
-                phi_data.value,
+                "{}:{}{} = {}({})",
+                get_value_repr(phi_data.value, value_data),
                 value_data.value_type,
-                var_data.name,
+                var_name,
+                get_phi_symbol(phi_data),
                 args.join(","),
             ));
         }
 
-        for instr in block_data.instrs.iter().copied() {
+        for instr in block_data.iter_instr() {
             let result = self.results.get(&instr);
-            let mut row = String::new();
+            // let mut row = String::new();
+            let mut row = format!("{{I{}:|", instr.get_id());
 
-            if let Some(resval) = result {
+            if let Some(&resval) = result {
                 let value_data = self
-                    .get_value(*resval)
+                    .get_value(resval)
                     .attach_printable("while constructing phi row")?;
 
-                row.push_str(&format!("{}:{}", *resval, value_data.value_type));
+                row.push_str(&format!(
+                    "{}:{}",
+                    get_value_repr(resval, value_data),
+                    value_data.value_type
+                ));
 
-                if let Some(&var_assign) = var_map.get(resval) {
+                if let Some(&var_assign) = var_map.get(&resval) {
                     let var_data = self.get_var(var_assign)?;
                     row.push_str(&format!("({})", var_data.name));
                 }
@@ -72,24 +99,43 @@ impl crate::function::FunctionData {
             }
 
             let instr_data = self.get_instr(instr)?;
-            let args: Vec<String> = instr_data
-                .get_args()
-                .iter()
-                .map(|kind| kind.to_string())
-                .collect();
+            let mut args = Vec::new();
+            for arg_kind in instr_data.get_args().iter() {
+                let repr = match arg_kind {
+                    ArgKind::Value(val) => {
+                        let value_data = self
+                            .get_value(*val)
+                            .attach_printable("when constructing arguments")?;
 
-            row.push_str(&format!("{}({})", instr_data.get_name(), args.join(",")));
+                        get_value_repr(*val, value_data)
+                    }
+
+                    ArgKind::NamedValue(_, val) => {
+                        let value_data = self
+                            .get_value(*val)
+                            .attach_printable("when constructing arguments")?;
+
+                        get_value_repr(*val, value_data)
+                    }
+
+                    rest => rest.to_string(),
+                };
+
+                args.push(repr);
+            }
+
+            row.push_str(&format!("{}({})}}", instr_data.get_name(), args.join(",")));
             rows.push(row);
         }
 
-        let block_end = block_data
-            .exit
-            .and_then(|instr| self.get_instr(instr).ok())
-            .map_or(BlockEnd::Nothing, |instr_data| match instr_data {
-                InstrData::Branch(br) => BlockEnd::ThenElse(br.then_block, br.else_block),
-                InstrData::Jump(jmp) => BlockEnd::Jump(jmp.dest),
-                _ => BlockEnd::Nothing,
-            });
+        let block_end =
+            self.get_instr(block_data.exit)
+                .ok()
+                .map_or(BlockEnd::Nothing, |instr_data| match instr_data {
+                    InstrData::Branch(br) => BlockEnd::ThenElse(br.then_block, br.else_block),
+                    InstrData::Jump(jmp) => BlockEnd::Jump(jmp.dest),
+                    _ => BlockEnd::Nothing,
+                });
 
         match block_end {
             BlockEnd::ThenElse(_, _) => rows.push("{<then>then|<else>else}".to_string()),

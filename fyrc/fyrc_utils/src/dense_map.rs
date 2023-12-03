@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     iter::{self, Enumerate},
     marker::PhantomData,
     ops::{self, Index, IndexMut},
@@ -107,6 +108,11 @@ where
     }
 
     #[inline]
+    pub fn into_values(self) -> impl Iterator<Item = V> {
+        self.data.into_iter()
+    }
+
+    #[inline]
     pub fn iter_mut(&mut self) -> EntityIterMut<'_, K, V> {
         EntityIterMut::new(self.data.iter_mut())
     }
@@ -134,6 +140,26 @@ where
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
+    }
+
+    #[inline]
+    pub fn next_key(&self) -> K {
+        K::with_id(self.data.len())
+    }
+}
+
+impl<K, V> fmt::Debug for DenseMap<K, V>
+where
+    K: fmt::Debug + EntityId,
+    V: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let args = self
+            .iter()
+            .map(|(k, v)| format!("{k:?}: {v:?}"))
+            .collect::<Vec<_>>();
+
+        write!(f, "[{}]", args.join(", "))
     }
 }
 
@@ -243,5 +269,17 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(id, val)| (K::with_id(id), val))
+    }
+}
+
+impl<K, V> FromIterator<V> for DenseMap<K, V>
+where
+    K: EntityId,
+{
+    fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
+        Self {
+            data: Vec::from_iter(iter),
+            _marker: PhantomData,
+        }
     }
 }

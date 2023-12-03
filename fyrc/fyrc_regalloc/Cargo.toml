@@ -1,23 +1,22 @@
 [package]
-name = "fyrc_ssa_passes"
+name = "fyrc_regalloc"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa" }
-fyrc_ssa_builder = { version = "0.1.0", path = "../fyrc_ssa_builder" }
-fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
-
-# Third party dependencies
 error-stack = "0.4.0"
 fxhash = "0.2.1"
+fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa", features = ["viz"] }
+fyrc_ssa_builder = { version = "0.1.0", path = "../fyrc_ssa_builder" }
+fyrc_ssa_passes = { version = "0.1.0", path = "../fyrc_ssa_passes" }
+fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
 thiserror = "1.0.47"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
 
 [[bench]]
-name = "all_passes"
+name = "regalloc_bench"
 harness = false

@@ -40,14 +40,16 @@ impl crate::function::FunctionData {
             }
         };
 
-        for phi in block_data.var_phi_map.values() {
+        for phi in block_data.phis.iter() {
             let phi_data = self.get_phi_data(*phi)?;
             let value_data = self
                 .get_value(phi_data.value)
                 .attach_printable("while constructing phi row")?;
-            let var_data = self
+            let var_name = self
                 .get_var(phi_data.var)
-                .attach_printable("while constructing phi row")?;
+                .map_or(String::new(), |var_data| {
+                    format!("({})", var_data.name.clone())
+                });
 
             let mut args = Vec::new();
             for (&arg_block, &arg_val) in phi_data.args.iter() {
@@ -63,10 +65,10 @@ impl crate::function::FunctionData {
             }
 
             rows.push(format!(
-                "{}:{}({}) = {}({})",
+                "{}:{}{} = {}({})",
                 get_value_repr(phi_data.value, value_data),
                 value_data.value_type,
-                var_data.name,
+                var_name,
                 get_phi_symbol(phi_data),
                 args.join(","),
             ));

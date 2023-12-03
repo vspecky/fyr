@@ -32,7 +32,7 @@ mod idomf {
                 current_level: if highest_level == Level::ZERO {
                     None
                 } else {
-                    Some(Level::with_id(highest_level.get_id().saturating_sub(1)))
+                    Some(Level::with_id(highest_level.get_id()))
                 },
             }
         }
@@ -353,6 +353,12 @@ fn find_def(
             is_mem: !entry_reg_set.contains(&value),
         });
 
+        let block_data = ctx
+            .func
+            .get_block_mut(block)
+            .change_context(SpillError::FunctionError)?;
+        block_data.phis.insert(phi);
+
         defs.insert(DefUseType::Phi(phi, block), phi_val);
         let mut args = FxHashMap::default();
         let preds = ctx
@@ -402,10 +408,8 @@ pub(super) fn fix_ssa(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()> {
             .collect::<FxHashSet<_>>();
         def_blocks.insert(def_uses.def_block);
 
-        println!("def blocks: {:?}", def_blocks);
         let dom_frontier =
             idomf::calculate_iter_dom_frontier(ctx.func, ctx.dom, &dj_graph, def_blocks)?;
-        println!("dom_frontier: {dom_frontier:?}");
 
         let mut total_defs = FxHashMap::default();
         for (instr, _) in &new_defs {

@@ -674,7 +674,6 @@ fn connect_block_predecessors(ctx: &mut SpillProcessCtx<'_>, block: Block) -> Sp
             .ok_or_else(|| report!(SpillError::BlockEndSpillSetMissing))?;
 
         let ins_block = if add_in_me { block } else { pred };
-        println!("ins block: {ins_block:?}");
         let mut added_instrs = Vec::new();
 
         // spill all values (except phis) from the predecessor's exit register set that are live-in
@@ -749,8 +748,6 @@ pub(crate) fn perform_spilling(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()>
     for block in ctx.func.blocks.keys() {
         connect_block_predecessors(ctx, block)?;
     }
-
-    println!("Before fix: {}", ctx.func.viz().expect("func print"));
 
     ssafix::fix_ssa(ctx)?;
 

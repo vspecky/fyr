@@ -13,3 +13,10 @@ fyrc_ssa_builder = { version = "0.1.0", path = "../fyrc_ssa_builder" }
 fyrc_ssa_passes = { version = "0.1.0", path = "../fyrc_ssa_passes" }
 fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
 thiserror = "1.0.47"
+
+[dev-dependencies]
+criterion = { version = "0.3", features = ["html_reports"] }
+
+[[bench]]
+name = "regalloc_bench"
+harness = false

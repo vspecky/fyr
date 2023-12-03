@@ -108,6 +108,11 @@ where
     }
 
     #[inline]
+    pub fn into_values(self) -> impl Iterator<Item = V> {
+        self.data.into_iter()
+    }
+
+    #[inline]
     pub fn iter_mut(&mut self) -> EntityIterMut<'_, K, V> {
         EntityIterMut::new(self.data.iter_mut())
     }

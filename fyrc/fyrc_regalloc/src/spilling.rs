@@ -102,53 +102,22 @@ impl ForwardDistanceMap {
     }
 }
 
-pub(crate) struct SpillProcessCtx<'a> {
-    func: &'a mut FunctionData,
-    gnu: &'a GlobalNextUse,
-    liveness: &'a LivenessAnalysis,
-    loop_forest: &'a LoopNestingForest,
-    def_use: &'a DefUse,
-    dfs_tree: &'a DfsTree,
-    dom: &'a DominatorTree,
-    max_regs: usize,
-    entry_reg_sets: FxHashMap<Block, FxHashSet<Value>>,
-    entry_spill_sets: FxHashMap<Block, FxHashSet<Value>>,
-    end_reg_sets: FxHashMap<Block, FxHashSet<Value>>,
-    end_spill_sets: FxHashMap<Block, FxHashSet<Value>>,
-    loop_use_sets: FxHashMap<Block, FxHashSet<Value>>,
-    loop_max_pressures: FxHashMap<Block, usize>,
-    inserted_instrs: FxHashMap<Value, Vec<(Instr, Block)>>,
-}
-
-impl<'a> SpillProcessCtx<'a> {
-    fn new(
-        func: &'a mut FunctionData,
-        gnu: &'a GlobalNextUse,
-        liveness: &'a LivenessAnalysis,
-        loop_forest: &'a LoopNestingForest,
-        def_use: &'a DefUse,
-        dfs_tree: &'a DfsTree,
-        dom: &'a DominatorTree,
-        max_regs: usize,
-    ) -> Self {
-        Self {
-            func,
-            gnu,
-            liveness,
-            loop_forest,
-            def_use,
-            dfs_tree,
-            dom,
-            max_regs,
-            entry_reg_sets: FxHashMap::default(),
-            entry_spill_sets: FxHashMap::default(),
-            end_reg_sets: FxHashMap::default(),
-            end_spill_sets: FxHashMap::default(),
-            loop_use_sets: FxHashMap::default(),
-            loop_max_pressures: FxHashMap::default(),
-            inserted_instrs: FxHashMap::default(),
-        }
-    }
+pub struct SpillProcessCtx<'a> {
+    pub func: &'a mut FunctionData,
+    pub gnu: &'a GlobalNextUse,
+    pub liveness: &'a LivenessAnalysis,
+    pub loop_forest: &'a LoopNestingForest,
+    pub def_use: &'a DefUse,
+    pub dfs_tree: &'a DfsTree,
+    pub dom: &'a DominatorTree,
+    pub max_regs: usize,
+    pub entry_reg_sets: FxHashMap<Block, FxHashSet<Value>>,
+    pub entry_spill_sets: FxHashMap<Block, FxHashSet<Value>>,
+    pub end_reg_sets: FxHashMap<Block, FxHashSet<Value>>,
+    pub end_spill_sets: FxHashMap<Block, FxHashSet<Value>>,
+    pub loop_use_sets: FxHashMap<Block, FxHashSet<Value>>,
+    pub loop_max_pressures: FxHashMap<Block, usize>,
+    pub inserted_instrs: FxHashMap<Value, Vec<(Instr, Block)>>,
 }
 
 /// Takes the register set `reg_set`, a desired number of registers `max_regs` and evicts values from
@@ -737,7 +706,7 @@ fn connect_block_predecessors(ctx: &mut SpillProcessCtx<'_>, block: Block) -> Sp
     Ok(())
 }
 
-pub(crate) fn perform_spilling(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()> {
+pub fn perform_spilling(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()> {
     helpers::calculate_loop_use_sets(ctx)?;
     helpers::calculate_max_loop_pressure(ctx)?;
 
@@ -754,25 +723,22 @@ pub(crate) fn perform_spilling(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()>
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use fyrc_ssa_builder::ssa_dsl;
-
-    macro_rules! build_ctx {
+pub mod test_utils {
+    #[macro_export]
+    macro_rules! build_spilling_ctx {
         ($func:ident, $ctx:ident, $max_regs:literal $(,$func_print:ident)?) => {
             let ((gnu, def_use, dom, liveness, loop_forest, dfs_tree), mut $func) =
-                fyrc_ssa_passes::test_utils::get_pass::<(
-                    fyrc_ssa_passes::GlobalNextUse,
-                    fyrc_ssa_passes::DefUse,
-                    fyrc_ssa_passes::DominatorTree,
-                    fyrc_ssa_passes::LivenessAnalysis,
-                    fyrc_ssa_passes::LoopNestingForest,
-                    fyrc_ssa_passes::DfsTree,
+                $crate::__private::fsp::test_utils::get_pass::<(
+                    $crate::__private::fsp::GlobalNextUse,
+                    $crate::__private::fsp::DefUse,
+                    $crate::__private::fsp::DominatorTree,
+                    $crate::__private::fsp::LivenessAnalysis,
+                    $crate::__private::fsp::LoopNestingForest,
+                    $crate::__private::fsp::DfsTree,
                 )>($func);
 
             $(let $func_print = $func.viz().expect("func print");)?
-            let mut $ctx = SpillProcessCtx {
+            let mut $ctx = $crate::spilling::SpillProcessCtx {
                 func: &mut $func,
                 gnu: &gnu,
                 liveness: &liveness,
@@ -781,16 +747,22 @@ mod tests {
                 dfs_tree: &dfs_tree,
                 dom: &dom,
                 max_regs: $max_regs,
-                entry_reg_sets: FxHashMap::default(),
-                entry_spill_sets: FxHashMap::default(),
-                end_reg_sets: FxHashMap::default(),
-                end_spill_sets: FxHashMap::default(),
-                loop_use_sets: FxHashMap::default(),
-                loop_max_pressures: FxHashMap::default(),
-                inserted_instrs: FxHashMap::default(),
+                entry_reg_sets: $crate::__private::FxHashMap::default(),
+                entry_spill_sets: $crate::__private::FxHashMap::default(),
+                end_reg_sets: $crate::__private::FxHashMap::default(),
+                end_spill_sets: $crate::__private::FxHashMap::default(),
+                loop_use_sets: $crate::__private::FxHashMap::default(),
+                loop_max_pressures: $crate::__private::FxHashMap::default(),
+                inserted_instrs: $crate::__private::FxHashMap::default(),
             };
         };
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fyrc_ssa_builder::ssa_dsl;
 
     macro_rules! check_spills_reloads {
         (@command($func:ident, $iter:ident) skip $num:literal $($($rest:tt)+)?) => {
@@ -822,7 +794,7 @@ mod tests {
             (ret v5)
         )};
 
-        build_ctx!(func, ctx, 3, func_print);
+        crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{}", func_print);
         perform_spilling(&mut ctx).expect("spilling");
         println!("{}", func.viz().expect("func print"));
@@ -837,7 +809,7 @@ mod tests {
             (ret v2)
         )};
 
-        build_ctx!(func, ctx, 2, func_print);
+        crate::build_spilling_ctx!(func, ctx, 2, func_print);
         println!("{}", func_print);
         perform_spilling(&mut ctx).expect("spilling");
         println!("{}", func.viz().expect("func print"));
@@ -857,7 +829,7 @@ mod tests {
             (ret v5)
         )};
 
-        build_ctx!(func, ctx, 3, func_print);
+        crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{}", func_print);
         perform_spilling(&mut ctx).expect("spilling");
         println!("{}", func.viz().expect("func print"));
@@ -876,11 +848,52 @@ mod tests {
             (ret v5)
         )};
 
-        build_ctx!(func, ctx, 3, func_print);
+        crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{}", func_print);
         perform_spilling(&mut ctx).expect("spilling");
-        println!("entry reg sets: {:?}", ctx.entry_reg_sets);
-        println!("end reg sets: {:?}", ctx.end_reg_sets);
         println!("{}", func.viz().expect("func print"));
+    }
+
+    #[test]
+    fn test_loop_spill_front_reload_behind() {
+        let func = ssa_dsl! {(
+            (let v0 10)
+            (let v1 20)
+            (let v2 (+ v0 v1))
+            (while v1 v2
+              ((let v5 20)
+               (let v4 (+ v1 v2))
+               (mut v1 (+ v4 v5))))
+            (let v3 (+ v0 10))
+            (ret v3)
+        )};
+
+        crate::build_spilling_ctx!(func, ctx, 3, func_print);
+        println!("{func_print}");
+        perform_spilling(&mut ctx).expect("spilling");
+        println!("{}", func.viz().expect("func viz"));
+    }
+
+    #[test]
+    fn test_do_something() {
+        let func = ssa_dsl! {(
+            (let v0 10)
+            (let v1 20)
+            (let v2 (+ v0 v1))
+            (while v1 v2
+              ((let v5 20)
+               (let v4 (+ v1 v2))
+               (mut v1 (+ v4 v5))
+               (let v6 (+ v0 v5))))
+            (let v3 (+ v0 10))
+            (ret v3)
+        )};
+
+        println!("{:?}", func.values);
+
+        crate::build_spilling_ctx!(func, ctx, 3, func_print);
+        println!("{func_print}");
+        perform_spilling(&mut ctx).expect("spilling");
+        println!("{}", func.viz().expect("func viz"));
     }
 }

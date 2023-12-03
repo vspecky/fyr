@@ -70,7 +70,10 @@ impl crate::Pass for DefUse {
             .get_pass::<crate::DominatorTree>()
             .change_context(DefUseError::DependentPassFailure)?;
 
-        let mut def_uses = DenseMap::with_prefilled(func.values.len());
+        let mut value_defs: DenseMap<Value, Option<(DefUseType, Block)>> =
+            DenseMap::with_prefilled(func.values.len());
+        let mut value_uses: DenseMap<Value, Vec<(DefUseType, Block)>> =
+            DenseMap::with_prefilled(func.values.len());
         let mut stack = vec![Block::START];
 
         while let Some(block) = stack.pop() {
@@ -83,14 +86,14 @@ impl crate::Pass for DefUse {
                     .get_phi_data(phi)
                     .change_context(DefUseError::FunctionError)?;
 
-                def_uses.set(
-                    phi_data.value,
-                    Some(DefUseData {
-                        def_type: DefUseType::Phi(phi, block),
-                        def_block: block,
-                        uses: Vec::new(),
-                    }),
-                );
+                value_defs.set(phi_data.value, Some((DefUseType::Phi(phi, block), block)));
+                for (&pblock, &arg) in phi_data.args.iter() {
+                    let duse = value_uses
+                        .get_mut(arg)
+                        .ok_or_else(|| report!(DefUseError::DefUseNotFound))?;
+
+                    duse.push((DefUseType::Phi(phi, pblock), block))
+                }
             }
 
             for instr in block_data.iter_instr() {
@@ -99,24 +102,15 @@ impl crate::Pass for DefUse {
                     .change_context(DefUseError::FunctionError)?;
 
                 for vuse in uses {
-                    let duse = def_uses
+                    let duse = value_uses
                         .get_mut(vuse)
-                        .map(|o| o.as_mut())
-                        .flatten()
                         .ok_or_else(|| report!(DefUseError::DefUseNotFound))?;
 
-                    duse.uses.push((DefUseType::Instr(instr), block));
+                    duse.push((DefUseType::Instr(instr), block));
                 }
 
                 if let Some(def) = func.get_instr_def(instr) {
-                    def_uses.set(
-                        def,
-                        Some(DefUseData {
-                            def_type: DefUseType::Instr(instr),
-                            def_block: block,
-                            uses: Vec::new(),
-                        }),
-                    );
+                    value_defs.set(def, Some((DefUseType::Instr(instr), block)));
                 }
             }
 
@@ -130,24 +124,19 @@ impl crate::Pass for DefUse {
             }
         }
 
-        for (block, block_data) in func.blocks.iter() {
-            for &phi in &block_data.phis {
-                let phi_data = func
-                    .get_phi_data(phi)
-                    .change_context(DefUseError::FunctionError)?;
+        let mut def_uses = DenseMap::with_capacity(func.values.len());
 
-                for (&pblock, &arg) in phi_data.args.iter() {
-                    let duse = def_uses
-                        .get_mut(arg)
-                        .map(|o| o.as_mut())
-                        .flatten()
-                        .ok_or_else(|| report!(DefUseError::DefUseNotFound))?;
-
-                    duse.uses.push((DefUseType::Phi(phi, pblock), block))
-                }
+        for (maybe_def, uses) in value_defs.into_values().zip(value_uses.into_values()) {
+            if let Some((def_type, def_block)) = maybe_def {
+                def_uses.insert(Some(DefUseData {
+                    def_type,
+                    def_block,
+                    uses,
+                }));
+            } else {
+                def_uses.insert(None);
             }
         }
-
         Ok(Self { def_uses })
     }
 }

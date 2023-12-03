@@ -54,7 +54,7 @@ impl fmt::Display for ValueType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ValueKind {
     InstrRes(Instr),
     SpillRes(Instr),
@@ -64,7 +64,7 @@ pub enum ValueKind {
     Tombstone,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ValueData {
     pub value_type: ValueType,
     pub value_kind: ValueKind,

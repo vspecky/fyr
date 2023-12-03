@@ -8,19 +8,15 @@
 //! in [this paper](https://www.researchgate.net/publication/221302742_Register_Spilling_and_Live-Range_Splitting_for_SSA-Form_Programs).
 
 mod helpers;
+mod ssafix;
 
 use error_stack::{report, ResultExt};
 use fxhash::{FxHashMap, FxHashSet};
-use fyrc_ssa::{
-    function::FunctionData,
-    instr,
-    value::{ValueData, ValueKind},
-    Block, Value,
-};
+use fyrc_ssa::{function::FunctionData, instr::Instr, Block, Value};
 use fyrc_ssa_passes::{
-    global_next_use::Distance, DfsTree, GlobalNextUse, LivenessAnalysis, LoopNestingForest,
+    global_next_use::Distance, DefUse, DfsTree, DominatorTree, GlobalNextUse, LivenessAnalysis,
+    LoopNestingForest,
 };
-use fyrc_utils::DenseMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpillError {
@@ -30,22 +26,42 @@ pub enum SpillError {
     BlockEndRegSetMissing,
     #[error("the block end spill set is missing for a block")]
     BlockEndSpillSetMissing,
+    #[error("the block entry regiter set is missing for a block")]
+    BlockEntryRegSetMissing,
+    #[error("the block entry spill set is missing for a block")]
+    BlockEntrySpillSetMissing,
     #[error("global nest use head set not found for block")]
     BlockGnuHeadMissing,
     #[error("def first use distance set not found for block")]
     BlockDFUseDSetMissing,
     #[error("max register pressure for block not found")]
     BlockRegPressureMissing,
+    #[error("def use not found for value")]
+    DefUseNotFound,
+    #[error("dj graph node data not found for block")]
+    DJGraphNodeDataNotFound,
+    #[error("dj graph successors not found")]
+    DJGraphSuccessorsNotFound,
+    #[error("dominator level not found")]
+    DominatorLevelNotFound,
+    #[error("dominator parent not found for block")]
+    DominatorParentNotFound,
     #[error("live-in set not found for block")]
     LiveInNotFound,
     #[error("loop children for block not found in loop nesting forest")]
     LoopChildrenNotFound,
     #[error("loop use set for block not found")]
     LoopUseSetNotFound,
+    #[error("phi use predecessor not found for value")]
+    PhiPredNotFound,
     #[error("phi argument for a predecessor block not found in current function")]
     PredPhiArgNotFound,
+    #[error("strict dominator set not found for block")]
+    StrictDomSetNotFound,
     #[error("subsequent use set not found for instruction")]
     SubsequentUseSetNotFound,
+    #[error("value def not found when going up the dominator tree")]
+    ValueDefNotFound,
 }
 
 type SpillResult<T> = Result<T, error_stack::Report<SpillError>>;
@@ -91,14 +107,17 @@ pub(crate) struct SpillProcessCtx<'a> {
     gnu: &'a GlobalNextUse,
     liveness: &'a LivenessAnalysis,
     loop_forest: &'a LoopNestingForest,
+    def_use: &'a DefUse,
     dfs_tree: &'a DfsTree,
+    dom: &'a DominatorTree,
     max_regs: usize,
-    start_reg_sets: FxHashMap<Block, FxHashSet<Value>>,
-    start_spill_sets: FxHashMap<Block, FxHashSet<Value>>,
+    entry_reg_sets: FxHashMap<Block, FxHashSet<Value>>,
+    entry_spill_sets: FxHashMap<Block, FxHashSet<Value>>,
     end_reg_sets: FxHashMap<Block, FxHashSet<Value>>,
     end_spill_sets: FxHashMap<Block, FxHashSet<Value>>,
     loop_use_sets: FxHashMap<Block, FxHashSet<Value>>,
     loop_max_pressures: FxHashMap<Block, usize>,
+    inserted_instrs: FxHashMap<Value, Vec<(Instr, Block)>>,
 }
 
 impl<'a> SpillProcessCtx<'a> {
@@ -107,7 +126,9 @@ impl<'a> SpillProcessCtx<'a> {
         gnu: &'a GlobalNextUse,
         liveness: &'a LivenessAnalysis,
         loop_forest: &'a LoopNestingForest,
+        def_use: &'a DefUse,
         dfs_tree: &'a DfsTree,
+        dom: &'a DominatorTree,
         max_regs: usize,
     ) -> Self {
         Self {
@@ -115,43 +136,19 @@ impl<'a> SpillProcessCtx<'a> {
             gnu,
             liveness,
             loop_forest,
+            def_use,
             dfs_tree,
+            dom,
             max_regs,
-            start_reg_sets: FxHashMap::default(),
-            start_spill_sets: FxHashMap::default(),
+            entry_reg_sets: FxHashMap::default(),
+            entry_spill_sets: FxHashMap::default(),
             end_reg_sets: FxHashMap::default(),
             end_spill_sets: FxHashMap::default(),
             loop_use_sets: FxHashMap::default(),
             loop_max_pressures: FxHashMap::default(),
+            inserted_instrs: FxHashMap::default(),
         }
     }
-}
-
-/// Creates a spill instruction in a function.
-fn make_spill_instr(func: &mut FunctionData, val: Value) -> instr::Instr {
-    func.instrs
-        .insert(instr::InstrData::SpillValue(instr::SpillValue { val }))
-}
-
-/// Creates a reload instruction in a function.
-fn make_reload_instr(func: &mut FunctionData, val: Value) -> SpillResult<instr::Instr> {
-    let val_type = func
-        .get_value(val)
-        .change_context(SpillError::FunctionError)?
-        .value_type;
-
-    let the_instr = func
-        .instrs
-        .insert(instr::InstrData::ReloadValue(instr::ReloadValue { val }));
-
-    let reload_result = func.values.insert(ValueData {
-        value_type: val_type,
-        value_kind: ValueKind::InstrRes(the_instr),
-    });
-
-    func.results.insert(the_instr, reload_result);
-
-    Ok(the_instr)
 }
 
 /// Takes the register set `reg_set`, a desired number of registers `max_regs` and evicts values from
@@ -207,7 +204,7 @@ fn block_belady_min(
         .get_block(block)
         .change_context(SpillError::FunctionError)?;
 
-    let block_instrs = block_data.instrs.clone();
+    let block_instrs = block_data.iter_instr().collect::<Vec<_>>();
     let phi_len = block_data.phis.len();
     let dfused_set = ctx
         .gnu
@@ -315,12 +312,22 @@ fn block_belady_min(
 
         // add all required spill instructions to the block.
         for spill_val in instr_spill_values {
-            new_instrs.push(make_spill_instr(ctx.func, spill_val));
+            let instr = helpers::make_spill_instr(ctx.func, spill_val)?;
+            ctx.inserted_instrs
+                .entry(spill_val)
+                .or_default()
+                .push((instr, block));
+            new_instrs.push(instr);
         }
 
         // add all required reload instructions to the block.
         for reload_val in instr_reload_values {
-            new_instrs.push(make_reload_instr(ctx.func, reload_val)?);
+            let instr = helpers::make_reload_instr(ctx.func, reload_val)?;
+            ctx.inserted_instrs
+                .entry(reload_val)
+                .or_default()
+                .push((instr, block));
+            new_instrs.push(instr);
         }
 
         new_instrs.push(instr);
@@ -331,11 +338,14 @@ fn block_belady_min(
         .get_block_mut(block)
         .change_context(SpillError::FunctionError)?;
 
-    block_data.instrs = new_instrs;
+    block_data.set_instrs(new_instrs);
 
     Ok((reg_set, spill_set))
 }
 
+/// Initialize the entry spill set of a block. This is initialized as the union of all the exit
+/// spill sets of all the predecessors of the block intersected with the entry register set of
+/// the given block.
 fn init_entry_spill_set(
     ctx: &SpillProcessCtx<'_>,
     block: Block,
@@ -379,6 +389,7 @@ fn init_entry_spill_set(
     Ok(&total_spill_set & entry_reg_set)
 }
 
+/// initialize the entry register set and spill set of a block that's not a loop header
 fn init_non_loop_header(
     ctx: &mut SpillProcessCtx<'_>,
     block: Block,
@@ -388,6 +399,8 @@ fn init_non_loop_header(
         .get_block_preds(block)
         .change_context(SpillError::FunctionError)?;
 
+    // if the block has a single predecessor, the entry register and spill sets are the same as the
+    // exit register and spill sets of the predecessor.
     if let &[only_pred] = &preds[..] {
         let my_reg_set = ctx
             .end_reg_sets
@@ -417,14 +430,22 @@ fn init_non_loop_header(
     let mut all_reg_set = FxHashSet::default();
     let mut some_reg_set = FxHashSet::default();
 
+    // we create the `All` and `Some` sets. The All set is the set of all values that are present
+    // in the end register set of every predecessor (intersection of all of them), and the `Some`
+    // set is the union.
     let mut first = true;
     for pred in preds {
         let mut end_reg_set = ctx
             .end_reg_sets
-            .get(&block)
+            .get(&pred)
             .ok_or_else(|| report!(SpillError::BlockEndRegSetMissing))?
             .clone();
 
+        // due to the way liveness is modeled in the IR, the arguments of a phi are live-out at the
+        // end of the phi block's predecessors (thus potentially in their end register sets) and the
+        // phi is live-in to its block. Hence to transfer the end register sets of a block's predecessors
+        // to the block, we replace the phi arguments with the phi defined value for all phis in the
+        // exit register sets of all predecessors.
         for phi in block_data.phis.iter().copied() {
             let phi_data = ctx
                 .func
@@ -451,9 +472,12 @@ fn init_non_loop_header(
         }
     }
 
+    // the register set is basically the `All` set. If there is space left over in the registers,
+    // we take values from `Some \ All` with the nearest next use distances and fill up the register
+    // set with them.
     let mut entry_reg_set = all_reg_set.clone();
     if entry_reg_set.len() < ctx.max_regs {
-        let mut remaining_values = (&some_reg_set & &all_reg_set)
+        let mut remaining_values = (&some_reg_set - &all_reg_set)
             .iter()
             .copied()
             .collect::<Vec<_>>();
@@ -473,10 +497,15 @@ fn init_non_loop_header(
     Ok((entry_reg_set.into_iter().collect(), entry_spill_set))
 }
 
+/// Initializes the entry register and spill sets of a block that is the header of a loop.
 fn init_loop_header(
     ctx: &mut SpillProcessCtx<'_>,
     block: Block,
 ) -> SpillResult<(Vec<Value>, FxHashSet<Value>)> {
+    // for loop headers, we ignore the exit register and spill sets of the predecessors and instead
+    // get all the values that are used within the loop. These values are primary candidates for
+    // the entry register set of the block so they can be available for loop uses without having
+    // to be reloaded on every loop turn.
     let used_hash_set = ctx
         .loop_use_sets
         .get(&block)
@@ -489,6 +518,8 @@ fn init_loop_header(
         .get_block_head_set(block)
         .ok_or_else(|| report!(SpillError::BlockGnuHeadMissing))?;
 
+    // for all values used in the loop, we sort them by their nearest next use distance and fill
+    // the register set with them.
     used_set.sort_unstable_by(|a, b| head_next_use.get(a).cmp(&head_next_use.get(b)));
 
     let mut entry_reg_set = used_set.into_iter().take(ctx.max_regs).collect::<Vec<_>>();
@@ -499,6 +530,10 @@ fn init_loop_header(
         .copied()
         .ok_or_else(|| report!(SpillError::BlockRegPressureMissing))?;
 
+    // if there is space left in the register set, we first ensure that all the blocks in the entire
+    // loop can hold more values based on the maximum loop register pressure, and if yes, we add
+    // values to the register set that we are sure live throughout the loop (with the nearest)
+    // next use distances
     if entry_reg_set.len() < ctx.max_regs && max_pressure < ctx.max_regs {
         let all_live_in = head_next_use.get_values::<FxHashSet<_>>();
         let mut live_outside_loop = (&all_live_in - used_hash_set)
@@ -524,7 +559,12 @@ fn init_loop_header(
 fn init_block_reg_and_spill_sets(ctx: &mut SpillProcessCtx<'_>, block: Block) -> SpillResult<()> {
     let (entry_reg_set, entry_spill_set) = if block.is_start_block() {
         (
-            ctx.func.arg_values.iter().take(3).copied().collect(),
+            ctx.func
+                .arg_values
+                .iter()
+                .take(fyrc_utils::consts::ABI_ARGS_IN_REGS)
+                .copied()
+                .collect(),
             FxHashSet::default(),
         )
     } else if ctx.loop_forest.all_loop_headers.contains(&block) {
@@ -533,9 +573,34 @@ fn init_block_reg_and_spill_sets(ctx: &mut SpillProcessCtx<'_>, block: Block) ->
         init_non_loop_header(ctx, block)?
     };
 
-    ctx.start_reg_sets
-        .insert(block, entry_reg_set.iter().copied().collect());
-    ctx.start_spill_sets.insert(block, entry_spill_set.clone());
+    let entry_reg_hashset = entry_reg_set.iter().copied().collect::<FxHashSet<_>>();
+    let block_data = ctx
+        .func
+        .get_block(block)
+        .change_context(SpillError::FunctionError)?;
+
+    // if a phi defined value is not in the entry register set of this block, the phi is a mem phi
+    // so mark it as such.
+    for phi in block_data.phis.clone() {
+        let phi_data = ctx
+            .func
+            .get_phi_data_mut(phi)
+            .change_context(SpillError::FunctionError)?;
+        let phi_value = phi_data.value;
+
+        if !entry_reg_hashset.contains(&phi_value) {
+            phi_data.is_mem = true;
+        }
+
+        let value_data = ctx
+            .func
+            .get_value_mut(phi_value)
+            .change_context(SpillError::FunctionError)?;
+        value_data.is_mem = !entry_reg_hashset.contains(&phi_value);
+    }
+
+    ctx.entry_reg_sets.insert(block, entry_reg_hashset);
+    ctx.entry_spill_sets.insert(block, entry_spill_set.clone());
 
     let (end_reg_set, end_spill_set) =
         block_belady_min(ctx, block, entry_reg_set, entry_spill_set)?;
@@ -547,6 +612,132 @@ fn init_block_reg_and_spill_sets(ctx: &mut SpillProcessCtx<'_>, block: Block) ->
     Ok(())
 }
 
+/// Adds spill & reload instructions on block edges to couple the entry and exit register sets and
+/// spill sets of blocks
+fn connect_block_predecessors(ctx: &mut SpillProcessCtx<'_>, block: Block) -> SpillResult<()> {
+    let preds = ctx
+        .func
+        .get_block_preds(block)
+        .change_context(SpillError::FunctionError)?;
+
+    let mut live_in_except_phis = ctx
+        .liveness
+        .get_live_in(block)
+        .change_context(SpillError::LiveInNotFound)?
+        .clone();
+
+    let phis = ctx
+        .func
+        .get_block_phis(block)
+        .change_context(SpillError::FunctionError)?;
+
+    // We do not couple phi instructions. We will let the SSA destruction phase take care of this
+    // after coalescing
+    for phi in phis {
+        let phi_data = ctx
+            .func
+            .get_phi_data(phi)
+            .change_context(SpillError::FunctionError)?;
+
+        live_in_except_phis.remove(&phi_data.value);
+    }
+
+    let entry_reg_set = ctx
+        .entry_reg_sets
+        .get(&block)
+        .ok_or_else(|| report!(SpillError::BlockEntryRegSetMissing))?;
+
+    let entry_spill_set = ctx
+        .entry_spill_sets
+        .get(&block)
+        .ok_or_else(|| report!(SpillError::BlockEntrySpillSetMissing))?;
+
+    // Whether to add coupling instructions in the current block (or in the predecessor).
+    // Since we have split critical edges, we have the assurance that each edge can be uniquely
+    // attributed to one block such that addition of coupling instructions to the block does not
+    // affect the control flow semantics of the program across other edges, so the count of
+    // the predecessors of the block is enough information to decide where to add the coupling
+    // instructions
+    let add_in_me = preds.len() == 1;
+
+    // add coupling code for all predecessors. We add the code such that all spill instructions
+    // come before all reload instructions.
+    for pred in preds {
+        let pred_end_reg_set = ctx
+            .end_reg_sets
+            .get(&pred)
+            .ok_or_else(|| report!(SpillError::BlockEndRegSetMissing))?;
+
+        let pred_end_spill_set = ctx
+            .end_spill_sets
+            .get(&pred)
+            .ok_or_else(|| report!(SpillError::BlockEndSpillSetMissing))?;
+
+        let ins_block = if add_in_me { block } else { pred };
+        println!("ins block: {ins_block:?}");
+        let mut added_instrs = Vec::new();
+
+        // spill all values (except phis) from the predecessor's exit register set that are live-in
+        // to the block but not in the block's entry register set and not already spilled along the
+        // path to the exit of this predecessor. Also spill a value even if it's present in the
+        // block's entry register set but was never spilled along this path (i.e. it's not in the
+        // exit spill set of the predecessor).
+        for &val in pred_end_reg_set {
+            // ignore phi defined values
+            if !live_in_except_phis.contains(&val) {
+                continue;
+            }
+
+            if (!entry_reg_set.contains(&val) && !pred_end_spill_set.contains(&val))
+                || (entry_reg_set.contains(&val)
+                    && !pred_end_spill_set.contains(&val)
+                    && entry_spill_set.contains(&val))
+            {
+                let spill_instr = helpers::make_spill_instr(ctx.func, val)?;
+                ctx.inserted_instrs
+                    .entry(val)
+                    .or_default()
+                    .push((spill_instr, ins_block));
+                added_instrs.push(spill_instr);
+            }
+        }
+
+        // add reloads for (non-phi) values that are present in the entry register set of this block
+        // but absent in the exit register set of the predecessor.
+        for &val in entry_reg_set {
+            // ignore phi-defined values
+            if !live_in_except_phis.contains(&val) {
+                continue;
+            }
+
+            if !pred_end_reg_set.contains(&val) {
+                let reload_instr = helpers::make_reload_instr(ctx.func, val)?;
+                ctx.inserted_instrs
+                    .entry(val)
+                    .or_default()
+                    .push((reload_instr, ins_block));
+                added_instrs.push(reload_instr);
+            }
+        }
+
+        let block_data = ctx
+            .func
+            .get_block_mut(if add_in_me { block } else { pred })
+            .change_context(SpillError::FunctionError)?;
+
+        if add_in_me {
+            added_instrs.extend(block_data.iter_instr());
+            block_data.set_instrs(added_instrs);
+        } else {
+            for added_instr in added_instrs {
+                block_data.append_instr(added_instr);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub(crate) fn perform_spilling(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()> {
     helpers::calculate_loop_use_sets(ctx)?;
     helpers::calculate_max_loop_pressure(ctx)?;
@@ -554,5 +745,145 @@ pub(crate) fn perform_spilling(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()>
     for &block in ctx.dfs_tree.postorder.iter().rev() {
         init_block_reg_and_spill_sets(ctx, block)?;
     }
+
+    for block in ctx.func.blocks.keys() {
+        connect_block_predecessors(ctx, block)?;
+    }
+
+    println!("Before fix: {}", ctx.func.viz().expect("func print"));
+
+    ssafix::fix_ssa(ctx)?;
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fyrc_ssa_builder::ssa_dsl;
+
+    macro_rules! build_ctx {
+        ($func:ident, $ctx:ident, $max_regs:literal $(,$func_print:ident)?) => {
+            let ((gnu, def_use, dom, liveness, loop_forest, dfs_tree), mut $func) =
+                fyrc_ssa_passes::test_utils::get_pass::<(
+                    fyrc_ssa_passes::GlobalNextUse,
+                    fyrc_ssa_passes::DefUse,
+                    fyrc_ssa_passes::DominatorTree,
+                    fyrc_ssa_passes::LivenessAnalysis,
+                    fyrc_ssa_passes::LoopNestingForest,
+                    fyrc_ssa_passes::DfsTree,
+                )>($func);
+
+            $(let $func_print = $func.viz().expect("func print");)?
+            let mut $ctx = SpillProcessCtx {
+                func: &mut $func,
+                gnu: &gnu,
+                liveness: &liveness,
+                loop_forest: &loop_forest,
+                def_use: &def_use,
+                dfs_tree: &dfs_tree,
+                dom: &dom,
+                max_regs: $max_regs,
+                entry_reg_sets: FxHashMap::default(),
+                entry_spill_sets: FxHashMap::default(),
+                end_reg_sets: FxHashMap::default(),
+                end_spill_sets: FxHashMap::default(),
+                loop_use_sets: FxHashMap::default(),
+                loop_max_pressures: FxHashMap::default(),
+                inserted_instrs: FxHashMap::default(),
+            };
+        };
+    }
+
+    macro_rules! check_spills_reloads {
+        (@command($func:ident, $iter:ident) skip $num:literal $($($rest:tt)+)?) => {
+            let mut $iter = $iter.skip($num);
+            $(check_spills_reloads!(@command($func, $iter) $($rest)+);)?
+        };
+
+        (@block($func:ident) ($num:literal; $($tok:tt)+)) => {{
+            let block_data = $func
+                .get_block(Block::with_id($num))
+                .expect("check get block");
+
+            let mut instr_iter = block_data.iter_instr();
+
+            check_spills_reloads!(@command($func, instr_iter) $($tok)+);
+        }};
+        ($func:ident; $(($($tok:tt)+))+) => {};
+    }
+
+    #[test]
+    fn test_straight_line_spills() {
+        let func = ssa_dsl! {(
+            (let v0 35)
+            (let v1 45)
+            (let v2 60)
+            (let v3 70)
+            (let v4 (+ v2 v3))
+            (let v5 (+ v0 v1))
+            (ret v5)
+        )};
+
+        build_ctx!(func, ctx, 3, func_print);
+        println!("{}", func_print);
+        perform_spilling(&mut ctx).expect("spilling");
+        println!("{}", func.viz().expect("func print"));
+    }
+
+    #[test]
+    fn test_arg_slot_spills() {
+        let func = ssa_dsl! {(
+            (let v0 10)
+            (let v1 20)
+            (let v2 (+ v0 v1))
+            (ret v2)
+        )};
+
+        build_ctx!(func, ctx, 2, func_print);
+        println!("{}", func_print);
+        perform_spilling(&mut ctx).expect("spilling");
+        println!("{}", func.viz().expect("func print"));
+    }
+
+    #[test]
+    fn test_diamond_top_spill_bot_reload() {
+        let func = ssa_dsl! {(
+            (let v0 10)
+            (let v1 20)
+            (if 1 2
+              ((let v2 10)
+               (let v3 10)
+               (let v4 (+ v2 v3)))
+              ())
+            (let v5 (+ v0 v1))
+            (ret v5)
+        )};
+
+        build_ctx!(func, ctx, 3, func_print);
+        println!("{}", func_print);
+        perform_spilling(&mut ctx).expect("spilling");
+        println!("{}", func.viz().expect("func print"));
+    }
+
+    #[test]
+    fn test_diamond_top_spill_left_reload() {
+        let func = ssa_dsl! {(
+            (let v0 10)
+            (let v1 20)
+            (if 1 2
+              ((let v2 10)
+               (let v4 (+ v1 v2)))
+              ())
+            (let v5 (+ v0 v1))
+            (ret v5)
+        )};
+
+        build_ctx!(func, ctx, 3, func_print);
+        println!("{}", func_print);
+        perform_spilling(&mut ctx).expect("spilling");
+        println!("entry reg sets: {:?}", ctx.entry_reg_sets);
+        println!("end reg sets: {:?}", ctx.end_reg_sets);
+        println!("{}", func.viz().expect("func print"));
+    }
 }

@@ -2,7 +2,7 @@ use std::fmt;
 
 use fyrc_utils::EntityId;
 
-use crate::{block::Block, instr::Instr, variable::Variable};
+use crate::{block::Block, instr::Instr, phi::Phi, variable::Variable};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Value(u32);
@@ -57,8 +57,10 @@ impl fmt::Display for ValueType {
 #[derive(Clone)]
 pub enum ValueKind {
     InstrRes(Instr),
+    SpillRes(Instr),
     FuncArg,
-    Phi { var: Variable, block: Block },
+    Phi(Phi),
+    MemPhi(Phi),
     Tombstone,
 }
 
@@ -66,10 +68,17 @@ pub enum ValueKind {
 pub struct ValueData {
     pub value_type: ValueType,
     pub value_kind: ValueKind,
+    pub is_mem: bool,
 }
 
 impl ValueData {
+    #[inline]
     pub fn entomb(&mut self) {
         self.value_kind = ValueKind::Tombstone;
+    }
+
+    #[inline]
+    pub fn is_spill(&self) -> bool {
+        matches!(self.value_kind, ValueKind::SpillRes(_))
     }
 }

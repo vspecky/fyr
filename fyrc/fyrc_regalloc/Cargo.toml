@@ -7,8 +7,9 @@ edition = "2021"
 
 [dependencies]
 error-stack = "0.4.0"
-fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa" }
+fxhash = "0.2.1"
+fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa", features = ["viz"] }
+fyrc_ssa_builder = { version = "0.1.0", path = "../fyrc_ssa_builder" }
 fyrc_ssa_passes = { version = "0.1.0", path = "../fyrc_ssa_passes" }
 fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
-fxhash = "0.2.1"
 thiserror = "1.0.47"

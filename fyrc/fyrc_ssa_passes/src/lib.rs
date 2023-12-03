@@ -1,5 +1,6 @@
 pub mod critical_edge_removal;
 pub mod cssa_translation;
+pub mod def_use;
 pub mod dfs_tree;
 pub mod dominator_tree;
 pub mod error;
@@ -11,6 +12,7 @@ pub mod utils;
 
 pub use critical_edge_removal::CriticalEdgeRemoval;
 pub use cssa_translation::CssaTranslation;
+pub use def_use::DefUse;
 pub use dfs_tree::DfsTree;
 pub use dominator_tree::DominatorTree;
 pub use global_next_use::GlobalNextUse;
@@ -200,6 +202,9 @@ pub mod test_utils {
         (A)
         (A, B)
         (A, B, C)
+        (A, B, C, D)
+        (A, B, C, D, E)
+        (A, B, C, D, E, F)
     }
 
     pub fn get_pass<T: MultiPass + 'static>(func: FunctionData) -> (T, FunctionData) {

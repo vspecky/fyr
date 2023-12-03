@@ -1,8 +1,8 @@
 use std::fmt;
 
 use error_stack::report;
+use fxhash::{FxHashMap, FxHashSet};
 use fyrc_utils::{DenseMap, EntityId};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     block::{Block, BlockData, BlockSealStatus},
@@ -91,11 +91,12 @@ impl FunctionData {
         let mut block_data = BlockData::new();
         block_data.sealed = BlockSealStatus::Sealed;
         let block = blocks.insert(block_data);
-        for var_data in &sig.args {
+        for (i, var_data) in sig.args.iter().enumerate() {
             let var = variables.insert(var_data.clone());
             let val = values.insert(ValueData {
                 value_type: var_data.var_type,
                 value_kind: ValueKind::FuncArg,
+                is_mem: i >= fyrc_utils::consts::ABI_ARGS_IN_REGS,
             });
 
             arg_values.push(val);
@@ -303,7 +304,7 @@ impl FunctionData {
                 );
             }
 
-            for instr in block_data.instrs.iter().copied() {
+            for instr in block_data.iter_instr() {
                 let result = self.results.get(&instr);
                 outwrite!(out, "    ");
 

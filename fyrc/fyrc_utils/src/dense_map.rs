@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     iter::{self, Enumerate},
     marker::PhantomData,
     ops::{self, Index, IndexMut},
@@ -134,6 +135,26 @@ where
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
+    }
+
+    #[inline]
+    pub fn next_key(&self) -> K {
+        K::with_id(self.data.len())
+    }
+}
+
+impl<K, V> fmt::Debug for DenseMap<K, V>
+where
+    K: fmt::Debug + EntityId,
+    V: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let args = self
+            .iter()
+            .map(|(k, v)| format!("{k:?}: {v:?}"))
+            .collect::<Vec<_>>();
+
+        write!(f, "[{}]", args.join(", "))
     }
 }
 

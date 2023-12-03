@@ -60,7 +60,7 @@ impl InterferenceGraph {
                 .get_block(block)
                 .change_context(InterferenceGraphError::FunctionError)?;
 
-            for instr in block_data.instrs.iter().rev().copied() {
+            for instr in block_data.iter_instr_rev() {
                 if let Some(ref def) = func.get_instr_def(instr) {
                     live.remove(def);
                 }

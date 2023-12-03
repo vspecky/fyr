@@ -28,6 +28,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             InterferenceGraph,
             DominatorTree,
             CssaTranslation,
+            DefUse,
             GlobalNextUse
         ]
     );

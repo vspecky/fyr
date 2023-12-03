@@ -1,4 +1,5 @@
 use error_stack::{report, ResultExt};
+use fxhash::{FxHashMap, FxHashSet};
 use fyrc_ssa::{
     block::{Block, BlockData, BlockFillKind, BlockSealStatus},
     constant::{Const, ConstKind},
@@ -9,7 +10,6 @@ use fyrc_ssa::{
     variable::{Variable, VariableData},
 };
 use fyrc_utils::{BoolExt, DenseMap};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     error::{BuilderError, BuilderResult},
@@ -248,13 +248,15 @@ impl<'a> FunctionBuilder<'a> {
             let var_type = self.get_variable_type(var).attach_printable(err)?;
             let phi_value = self.func_data.values.insert(ValueData {
                 value_type: var_type,
-                value_kind: ValueKind::Phi { var, block },
+                value_kind: ValueKind::Phi(self.phis.next_key()),
+                is_mem: false,
             });
             let phi_data = PhiData {
                 var,
                 block,
                 value: phi_value,
                 args: FxHashMap::default(),
+                is_mem: false,
             };
 
             let phi = self.phis.insert(Some(phi_data));
@@ -279,7 +281,8 @@ impl<'a> FunctionBuilder<'a> {
 
             let phi_value = self.func_data.values.insert(ValueData {
                 value_type: var_type,
-                value_kind: ValueKind::Phi { var, block },
+                value_kind: ValueKind::Phi(self.phis.next_key()),
+                is_mem: false,
             });
 
             let mut phi = PhiData {
@@ -287,6 +290,7 @@ impl<'a> FunctionBuilder<'a> {
                 block,
                 value: phi_value,
                 args: FxHashMap::default(),
+                is_mem: false,
             };
 
             for pred in preds {
@@ -469,6 +473,23 @@ impl<'a> FunctionBuilder<'a> {
             block.phis = new_set;
         }
 
+        for value in self.func_data.values.values_mut() {
+            match &mut value.value_kind {
+                ValueKind::Phi(phi) => {
+                    *phi = *phi_old2new_id
+                        .get(phi)
+                        .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?;
+                }
+                ValueKind::MemPhi(phi) => {
+                    *phi = *phi_old2new_id
+                        .get(phi)
+                        .ok_or_else(|| report!(BuilderError::FunctionResourceMissing))?;
+                }
+
+                _ => {}
+            }
+        }
+
         self.func_data.phis = phi_map;
 
         self.module
@@ -538,13 +559,12 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
                 .set_current_block_filled()
                 .attach_printable(err)?;
             let block = self.builder.get_current_block_mut().attach_printable(err)?;
-            block.exit = Some(instr);
+            block.exit = instr;
         } else {
             self.builder
                 .get_current_block_mut()
                 .attach_printable(err)?
-                .instrs
-                .push(instr);
+                .append_instr(instr);
         }
 
         if self
@@ -568,6 +588,7 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
             let value = self.builder.func_data.values.insert(ValueData {
                 value_type: res_type,
                 value_kind: ValueKind::InstrRes(instr),
+                is_mem: false,
             });
             self.builder.func_data.results.insert(instr, value);
             Some(value)

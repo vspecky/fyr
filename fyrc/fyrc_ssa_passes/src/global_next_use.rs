@@ -410,14 +410,13 @@ impl crate::Pass for GlobalNextUse {
 
             let mut running_map = tail_set.clone();
             for d in running_map.0.values_mut() {
-                *d = *d + Distance::Finite(block_data.instrs.len() + block_data.phis.len());
+                *d = *d + Distance::Finite(block_data.len() + block_data.phis.len());
             }
 
             let mut block_reg_pressure = running_map.len();
-            for (distance_from_start, instr) in block_data
-                .instrs
-                .iter()
-                .copied()
+            let block_instrs = block_data.iter_instr().collect::<Vec<_>>();
+            for (distance_from_start, instr) in block_instrs
+                .into_iter()
                 .enumerate()
                 .map(|(d, i)| (Distance::Finite(block_data.phis.len() + d), i))
                 .rev()

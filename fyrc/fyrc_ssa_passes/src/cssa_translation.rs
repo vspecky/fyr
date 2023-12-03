@@ -215,6 +215,7 @@ impl<'a> CssaTranslationInner<'a> {
                         let copied_to = func_data.values.insert(ValueData {
                             value_type: val_type,
                             value_kind: ValueKind::InstrRes(the_instr),
+                            is_mem: false,
                         });
 
                         func_data.results.insert(the_instr, copied_to);
@@ -230,8 +231,7 @@ impl<'a> CssaTranslationInner<'a> {
                         self.func
                             .get_block_mut(pred_block)
                             .change_context(CssaTranslationError::FunctionError)?
-                            .instrs
-                            .push(the_instr);
+                            .append_instr(the_instr);
 
                         self.func
                             .get_phi_data_mut(phi)
@@ -300,8 +300,7 @@ impl<'a> CssaTranslationInner<'a> {
                         self.func
                             .get_block_mut(block)
                             .change_context(CssaTranslationError::FunctionError)?
-                            .instrs
-                            .insert(0, the_instr);
+                            .prepend_instr(the_instr);
 
                         self.func
                             .get_phi_data_mut(phi)

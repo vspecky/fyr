@@ -45,7 +45,7 @@ fn remove_critical_edges(func: &mut FunctionData) -> PassResult<(), CriticalEdge
             let jump_instr = func
                 .instrs
                 .insert(instr::InstrData::Jump(instr::Jump { dest: succ }));
-            new_block_data.exit = Some(jump_instr);
+            new_block_data.exit = jump_instr;
             new_block_data.predecessors.push(block);
             new_block_data.successors.push(succ);
             let new_block = func.blocks.insert(new_block_data);
@@ -60,9 +60,7 @@ fn remove_critical_edges(func: &mut FunctionData) -> PassResult<(), CriticalEdge
                 }
             }
 
-            let last_instr = pred_block_data
-                .exit
-                .ok_or_else(|| report!(CriticalEdgeRemovalError::EmptyBlock))?;
+            let last_instr = pred_block_data.exit;
 
             let instr_data = func
                 .get_instr_mut(last_instr)

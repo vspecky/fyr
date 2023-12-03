@@ -2,10 +2,18 @@
 
 use error_stack::{report, ResultExt};
 use fxhash::{FxHashMap, FxHashSet};
-use fyrc_ssa::{block::Block, function::FunctionData, value::Value};
+use fyrc_ssa::{
+    block::Block,
+    function::FunctionData,
+    instr,
+    value::{self, Value},
+};
 use fyrc_ssa_passes::{GlobalNextUse, LivenessAnalysis, LoopNestingForest};
 
 use crate::spilling::{SpillError, SpillProcessCtx, SpillResult};
+
+pub(super) use loop_pressure::calculate_max_loop_pressure;
+pub(super) use loop_uses::calculate_loop_use_sets;
 
 mod loop_uses {
     use super::*;
@@ -38,7 +46,7 @@ mod loop_uses {
             }
         }
 
-        for &instr in &block_data.instrs {
+        for instr in block_data.iter_instr() {
             let instr_uses = ctx
                 .func
                 .get_instr_uses(instr)
@@ -124,5 +132,46 @@ mod loop_pressure {
     }
 }
 
-pub(super) use loop_pressure::calculate_max_loop_pressure;
-pub(super) use loop_uses::calculate_loop_use_sets;
+/// Creates a spill instruction in a function.
+pub(super) fn make_spill_instr(func: &mut FunctionData, val: Value) -> SpillResult<instr::Instr> {
+    let val_type = func
+        .get_value(val)
+        .change_context(SpillError::FunctionError)?
+        .value_type;
+
+    let the_instr = func
+        .instrs
+        .insert(instr::InstrData::SpillValue(instr::SpillValue { val }));
+
+    let spill_result = func.values.insert(value::ValueData {
+        value_type: val_type,
+        value_kind: value::ValueKind::SpillRes(the_instr),
+        is_mem: true,
+    });
+
+    func.results.insert(the_instr, spill_result);
+
+    Ok(the_instr)
+}
+
+/// Creates a reload instruction in a function.
+pub(super) fn make_reload_instr(func: &mut FunctionData, val: Value) -> SpillResult<instr::Instr> {
+    let val_type = func
+        .get_value(val)
+        .change_context(SpillError::FunctionError)?
+        .value_type;
+
+    let the_instr = func
+        .instrs
+        .insert(instr::InstrData::ReloadValue(instr::ReloadValue { val }));
+
+    let reload_result = func.values.insert(value::ValueData {
+        value_type: val_type,
+        value_kind: value::ValueKind::InstrRes(the_instr),
+        is_mem: false,
+    });
+
+    func.results.insert(the_instr, reload_result);
+
+    Ok(the_instr)
+}

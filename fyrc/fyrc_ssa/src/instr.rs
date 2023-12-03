@@ -439,7 +439,11 @@ impl SsaInstr for Branch {
     }
 
     fn get_uses(&self) -> Vec<Value> {
-        vec![]
+        match self.kind {
+            BranchKind::Status(_) => vec![],
+            BranchKind::Zero(v) => vec![v],
+            BranchKind::NotZero(v) => vec![v],
+        }
     }
 }
 
@@ -578,7 +582,7 @@ impl SsaInstr for ReloadValue {
     }
 
     fn get_name(&self) -> String {
-        "spill".to_string()
+        "reload".to_string()
     }
 
     fn get_args(&self) -> InstrArgs {
@@ -592,6 +596,10 @@ impl SsaInstr for ReloadValue {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Instr(usize);
+
+impl Instr {
+    pub const NOP: Self = Self(usize::MAX);
+}
 
 impl EntityId for Instr {
     #[inline]

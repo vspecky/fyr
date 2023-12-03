@@ -86,7 +86,7 @@ impl<'a> LivenessAnalysisBuilder<'a> {
                 .get_block(block)
                 .change_context(LivenessAnalysisError::FunctionError)?;
 
-            for instr in block_data.instrs.iter().rev().copied() {
+            for instr in block_data.iter_instr_rev() {
                 if let Some(ref def) = self.func.get_instr_def(instr) {
                     live.remove(def);
                 }

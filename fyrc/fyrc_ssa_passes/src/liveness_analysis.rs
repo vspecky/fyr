@@ -1,7 +1,7 @@
 use error_stack::{report, ResultExt};
 use fxhash::FxHashSet;
 
-use fyrc_ssa::{block::Block, function::FunctionData, value::Value};
+use fyrc_ssa::{block::Block, function::FunctionData, instr::Instr, value::Value};
 use fyrc_utils::{BoolExt, DenseMap};
 
 use crate::error::PassResult;
@@ -18,6 +18,8 @@ pub enum LivenessAnalysisError {
     LiveOutNotFound,
     #[error("loop forest successors not found for block")]
     LoopSuccessorsNotFound,
+    #[error("subsequent use set not found for instruction")]
+    SubsequentUseSetNotFound,
 }
 
 struct LivenessAnalysisBuilder<'a> {
@@ -174,12 +176,59 @@ impl<'a> LivenessAnalysisBuilder<'a> {
         Ok(())
     }
 
+    fn build_subsequent_liveness_sets(
+        &mut self,
+    ) -> PassResult<DenseMap<Instr, Vec<Value>>, LivenessAnalysisError> {
+        let mut subsequent_use_sets: DenseMap<Instr, Vec<Value>> =
+            DenseMap::with_prefilled(self.func.instrs.len());
+
+        for block in self.func.blocks.keys() {
+            let block_data = self
+                .func
+                .get_block(block)
+                .change_context(LivenessAnalysisError::FunctionError)?;
+
+            let mut running_map = self
+                .live_out
+                .get(block)
+                .ok_or_else(|| report!(LivenessAnalysisError::LiveOutNotFound))?
+                .clone();
+
+            for instr in block_data.iter_instr_rev() {
+                let uses = self
+                    .func
+                    .get_instr_uses(instr)
+                    .change_context(LivenessAnalysisError::FunctionError)?;
+
+                let subsequent_uses = uses
+                    .iter()
+                    .copied()
+                    .filter(|v| running_map.contains(v))
+                    .collect::<Vec<_>>();
+
+                subsequent_use_sets.set(instr, subsequent_uses);
+
+                for instr_use in uses {
+                    running_map.insert(instr_use);
+                }
+
+                if let Some(def) = self.func.get_instr_def(instr) {
+                    running_map.remove(&def);
+                }
+            }
+        }
+
+        Ok(subsequent_use_sets)
+    }
+
     fn build(mut self) -> PassResult<LivenessAnalysis, LivenessAnalysisError> {
         self.propagate_partial_liveness_info()?;
         self.propagate_loop_liveness_info()?;
+        let subsequent_use_sets = self.build_subsequent_liveness_sets()?;
         Ok(LivenessAnalysis {
             live_in: self.live_in,
             live_out: self.live_out,
+            subsequent_use_sets,
         })
     }
 }
@@ -187,6 +236,7 @@ impl<'a> LivenessAnalysisBuilder<'a> {
 pub struct LivenessAnalysis {
     pub live_in: DenseMap<Block, FxHashSet<Value>>,
     pub live_out: DenseMap<Block, FxHashSet<Value>>,
+    pub subsequent_use_sets: DenseMap<Instr, Vec<Value>>,
 }
 
 impl LivenessAnalysis {
@@ -224,6 +274,15 @@ impl LivenessAnalysis {
         self.live_out
             .get_mut(block)
             .ok_or_else(|| report!(LivenessAnalysisError::LiveOutNotFound))
+    }
+
+    pub fn get_subsequent_use_set(
+        &self,
+        instr: Instr,
+    ) -> PassResult<&Vec<Value>, LivenessAnalysisError> {
+        self.subsequent_use_sets
+            .get(instr)
+            .ok_or_else(|| report!(LivenessAnalysisError::SubsequentUseSetNotFound))
     }
 }
 

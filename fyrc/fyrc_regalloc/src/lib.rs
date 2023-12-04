@@ -1,3 +1,4 @@
+pub mod coloring;
 pub mod spilling;
 
 #[doc(hidden)]

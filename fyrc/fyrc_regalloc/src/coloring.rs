@@ -5,6 +5,7 @@ use fxhash::FxHashSet;
 use fyrc_ssa::{
     block::Block,
     function::{FunctionData, InstructionSet},
+    instr::Instr,
     value::{Value, ValueData},
 };
 use fyrc_ssa_passes::{DominatorTree, LivenessAnalysis};
@@ -82,7 +83,7 @@ impl RegisterFile {
     }
 
     fn reset(&mut self) {
-        self.free_regs = (1..=self.total_regs).map(Register).collect();
+        self.free_regs = (0..self.total_regs).map(Register).collect();
         self.allocated_regs = FxHashSet::default();
     }
 
@@ -169,6 +170,7 @@ impl ValueAllocType {
 struct AllocFile<'a> {
     value_data: &'a DenseMap<Value, ValueData>,
     allocations: DenseMap<Value, ValueAllocType>,
+    free_regs: DenseMap<Instr, Option<Register>>,
     reg_file: RegisterFile,
     spill_slot_file: SpillSlotFile,
 }
@@ -178,6 +180,7 @@ impl<'a> AllocFile<'a> {
         Self {
             value_data: &func.values,
             allocations: DenseMap::with_prefilled(func.values.len()),
+            free_regs: DenseMap::with_prefilled(func.instrs.len()),
             reg_file: RegisterFile::new(func.signature.isa),
             spill_slot_file: SpillSlotFile::new(),
         }
@@ -248,9 +251,15 @@ impl<'a> AllocFile<'a> {
         Ok(())
     }
 
+    fn set_instr_free_register(&mut self, instr: Instr) {
+        self.free_regs
+            .set(instr, self.reg_file.free_regs.first().copied());
+    }
+
     fn done(self) -> RegallocResult {
         RegallocResult {
             total_regs: self.reg_file.total_regs,
+            free_regs: self.free_regs,
             total_spill_slots: self.spill_slot_file.total_slots,
             allocations: self.allocations,
         }
@@ -261,6 +270,7 @@ pub struct RegallocResult {
     pub total_regs: u8,
     pub total_spill_slots: u16,
     pub allocations: DenseMap<Value, ValueAllocType>,
+    pub free_regs: DenseMap<Instr, Option<Register>>,
 }
 
 pub fn perform_coloring(
@@ -309,6 +319,7 @@ pub fn perform_coloring(
                 .get_subsequent_use_set(instr)
                 .change_context(ColoringError::LivenessAnalysisError)?;
 
+            alloc_file.set_instr_free_register(instr);
             for instr_use in instr_uses {
                 if !subsequent_uses.contains(&instr_use) {
                     alloc_file.free(instr_use)?;

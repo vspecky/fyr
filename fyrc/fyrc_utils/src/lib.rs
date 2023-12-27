@@ -60,3 +60,10 @@ impl<E> BoolExt<E> for bool {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Alignment {
+    Byte,
+    Halfword,
+    Word,
+}

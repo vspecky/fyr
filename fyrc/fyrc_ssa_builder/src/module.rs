@@ -3,6 +3,7 @@ use fxhash::FxHashMap;
 use fyrc_ssa::{
     block::Block,
     function::{Function, FunctionData, InstructionSet, Signature},
+    value::{GlobalValue, GlobalValueData},
 };
 use fyrc_utils::{BoolExt, DenseMap};
 
@@ -20,6 +21,7 @@ pub struct SsaModule {
     signatures: DenseMap<Function, Signature>,
     definitions: DenseMap<Function, FunctionState>,
     main: Function,
+    global_data: DenseMap<GlobalValue, GlobalValueData>,
 }
 
 impl SsaModule {
@@ -39,6 +41,7 @@ impl SsaModule {
             signatures,
             definitions,
             main,
+            global_data: DenseMap::new(),
         }
     }
 
@@ -62,6 +65,16 @@ impl SsaModule {
             .get(func)
             .cloned()
             .ok_or_else(|| report!(BuilderError::FunctionNotFound))
+    }
+
+    #[inline]
+    pub fn define_global(&mut self, data: GlobalValueData) -> GlobalValue {
+        self.global_data.insert(data)
+    }
+
+    #[inline]
+    pub fn get_global(&self, global: GlobalValue) -> Option<&GlobalValueData> {
+        self.global_data.get(global)
     }
 
     pub fn declare_function(&mut self, sig: Signature) -> Function {

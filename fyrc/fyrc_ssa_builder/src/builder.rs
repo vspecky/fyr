@@ -6,7 +6,7 @@ use fyrc_ssa::{
     function::{Function, FunctionData},
     instr::{self, InstrData},
     phi::{Phi, PhiData},
-    value::{Value, ValueData, ValueKind, ValueType},
+    value::{GlobalValue, GlobalValueData, Value, ValueData, ValueKind, ValueType},
     variable::{Variable, VariableData},
 };
 use fyrc_utils::{BoolExt, DenseMap};
@@ -837,6 +837,17 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
     pub fn const32(&mut self, value: u32) -> BuilderResult<Value> {
         self.build_const(ConstKind::Const32(value))
             .attach_printable("when trying to add 'const.32' instruction")
+    }
+
+    pub fn load_global(&mut self, global: GlobalValue) -> BuilderResult<Value> {
+        let global_data = self
+            .builder
+            .module
+            .get_global(global)
+            .ok_or_else(|| report!(BuilderError::GlobalValueMissing))?;
+
+        self.build(instr::LoadGlobal { value: global }, global_data.get_type())?
+            .ok_or_else(|| report!(BuilderError::MissingResult))
     }
 }
 

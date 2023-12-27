@@ -58,6 +58,7 @@ impl EntityId for Level {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DominatorTree {
     pub tree: DenseMap<Block, FxHashSet<Block>>,
     pub parent: DenseMap<Block, Block>,

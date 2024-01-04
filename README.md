@@ -1,6 +1,6 @@
 # <img src="./docs/logo.png" alt="Fyr Logo" height="45"> Fyr
 
-Fyr will be a programming language specifically geared towards building games & software for the Nintendo Game Boy Advance and will have features catering to the same.
+Fyr (pronounced the same as 'fire') will be a programming language specifically geared towards building games & software for the Nintendo Game Boy Advance and will have features catering to the same.
 
 This repository will host the Fyr Compiler (Fyrc) which will support fully featured end to end compilation from Fyr source code to GBA (ARM7TDMI) machine code with minimal third-party dependencies.
 

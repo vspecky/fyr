@@ -27,7 +27,7 @@ While the Language Design and the Frontend are still pending, Fyrc already boast
   - [x] Register Spilling and Live Range Splitting
   - [x] Register and Spill Slot Assignment
 - [x] Backend: Thumb Machine Code Generation
-  - [x] Machine Instruction (Machinst) IR
+  - [x] Machine Instruction IR
   - [] Machine Code Generation
   - [] Machine Code & Data Layout Generation
 - [] Frontend: Basic Language Design with Parser

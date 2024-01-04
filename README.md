@@ -1,6 +1,4 @@
-<h1 align="center">
-    Fyr
-</h1>
+# ![Fyr Logo](./docs/logo.png "Fyr") Fyr
 
 Fyr will be a programming language specifically geared towards building games & software for the Nintendo Game Boy Advance and will have features catering to the same.
 

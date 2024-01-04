@@ -26,36 +26,36 @@ While the Language Design and the Frontend are still pending, Fyrc already boast
 - [x] Backend: SSA based Register Allocation
   - [x] Register Spilling and Live Range Splitting
   - [x] Register and Spill Slot Assignment
-- [x] Backend: Thumb Machine Code Generation
-  - [x] Machine Instruction IR
-  - [] Machine Code Generation
-  - [] Machine Code & Data Layout Generation
-- [] Frontend: Basic Language Design with Parser
-  - [] Handwritten Parser
-  - [] Basic Type Checking and Inference
-  - [] Lowering to SSA
-  - [] Support for
-    - [] Integers & Integer Pointers
-    - [] Control Flow (Functions, Loops, if/else)
-    - [] Static immutable data
-- [] Testing and QoL Improvements:
-  - [] End to End compiler tests
-  - [] Fuzzing framework
-  - [] Basic example programs/games
-  - [] Web Playground (WASM)
-  - [] Basic Language docs
-  - [] Basic Compiler Design docs
-- [] Frontend+Backend: Aggregate types support (structs & arrays)
-  - [] Heap allocated
-  - [] Stack allocated
-- [] Backend: More SSA passes
-  - [] Scalar Replacement of Aggregates
-  - [] Control Flow optimization passes
-    - [] ...
-  - [] Data Flow optimization passes
-    - [] ...
-- [] Backend: ARM Machine Code Generation
-- [] Backend: ARM and Thumb Interop
-- [] Frontend+Backend: Link Region support for functions and globals (ROM/IWRAM/EWRAM)
-- [] Frontend+Backend: Support for Static Mutable data.
-- [] Machine Code optimization framework using E-Graphs & Equality Saturation
+- [ ] Backend: Thumb Machine Code Generation
+  - [x] Machine Instruction (Machinst) IR
+  - [ ] Machine Code Generation
+  - [ ] Machine Code & Data Layout Generation
+- [ ] Frontend: Basic Language Design with Parser
+  - [ ] Handwritten Parser
+  - [ ] Basic Type Checking and Inference
+  - [ ] Lowering to SSA
+  - [ ] Support for
+    - [ ] Integers & Integer Pointers
+    - [ ] Control Flow (Functions, Loops, if/else)
+    - [ ] Static immutable data
+- [ ] Testing and QoL Improvements:
+  - [ ] End to End compiler tests
+  - [ ] Fuzzing framework
+  - [ ] Basic example programs/games
+  - [ ] Web Playground (WASM)
+  - [ ] Basic Language docs
+  - [ ] Basic Compiler Design docs
+- [ ] Frontend+Backend: Aggregate types support (structs & arrays)
+  - [ ] Heap allocated
+  - [ ] Stack allocated
+- [ ] Backend: More SSA passes
+  - [ ] Scalar Replacement of Aggregates
+  - [ ] Control Flow optimization passes
+    - [ ] ...
+  - [ ] Data Flow optimization passes
+    - [ ] ...
+- [ ] Backend: ARM Machine Code Generation
+- [ ] Backend: ARM and Thumb Interop
+- [ ] Frontend+Backend: Link Region support for functions and globals (ROM/IWRAM/EWRAM)
+- [ ] Frontend+Backend: Support for Static Mutable data.
+- [ ] Machine Code optimization framework using E-Graphs & Equality Saturation

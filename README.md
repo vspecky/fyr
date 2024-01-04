@@ -26,7 +26,7 @@ While the Language Design and the Frontend are still pending, Fyrc already boast
 - [x] Backend: SSA based Register Allocation
   - [x] Register Spilling and Live Range Splitting
   - [x] Register and Spill Slot Assignment
-- [] Backend: Thumb Machine Code Generation
+- [x] Backend: Thumb Machine Code Generation
   - [x] Machine Instruction (Machinst) IR
   - [] Machine Code Generation
   - [] Machine Code & Data Layout Generation

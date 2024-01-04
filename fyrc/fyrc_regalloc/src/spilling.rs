@@ -102,8 +102,8 @@ impl ForwardDistanceMap {
     }
 }
 
-pub struct SpillProcessCtx<'a> {
-    pub func: &'a mut FunctionData,
+pub struct SpillProcessCtx<'a, 'b> {
+    pub func: &'b mut FunctionData,
     pub gnu: &'a GlobalNextUse,
     pub liveness: &'a LivenessAnalysis,
     pub loop_forest: &'a LoopNestingForest,
@@ -163,7 +163,7 @@ fn limit(
 /// the block, inserting spills and reloads as necessary to keep the total number of values in registers
 /// less than or equal to `max_regs`.
 fn block_belady_min(
-    ctx: &mut SpillProcessCtx<'_>,
+    ctx: &mut SpillProcessCtx<'_, '_>,
     block: Block,
     mut reg_set: Vec<Value>,
     mut spill_set: FxHashSet<Value>,
@@ -316,7 +316,7 @@ fn block_belady_min(
 /// spill sets of all the predecessors of the block intersected with the entry register set of
 /// the given block.
 fn init_entry_spill_set(
-    ctx: &SpillProcessCtx<'_>,
+    ctx: &SpillProcessCtx<'_, '_>,
     block: Block,
     entry_reg_set: &FxHashSet<Value>,
 ) -> SpillResult<FxHashSet<Value>> {
@@ -360,7 +360,7 @@ fn init_entry_spill_set(
 
 /// initialize the entry register set and spill set of a block that's not a loop header
 fn init_non_loop_header(
-    ctx: &mut SpillProcessCtx<'_>,
+    ctx: &mut SpillProcessCtx<'_, '_>,
     block: Block,
 ) -> SpillResult<(Vec<Value>, FxHashSet<Value>)> {
     let preds = ctx
@@ -468,7 +468,7 @@ fn init_non_loop_header(
 
 /// Initializes the entry register and spill sets of a block that is the header of a loop.
 fn init_loop_header(
-    ctx: &mut SpillProcessCtx<'_>,
+    ctx: &mut SpillProcessCtx<'_, '_>,
     block: Block,
 ) -> SpillResult<(Vec<Value>, FxHashSet<Value>)> {
     // for loop headers, we ignore the exit register and spill sets of the predecessors and instead
@@ -525,7 +525,10 @@ fn init_loop_header(
     Ok((entry_reg_set, entry_spill_set))
 }
 
-fn init_block_reg_and_spill_sets(ctx: &mut SpillProcessCtx<'_>, block: Block) -> SpillResult<()> {
+fn init_block_reg_and_spill_sets(
+    ctx: &mut SpillProcessCtx<'_, '_>,
+    block: Block,
+) -> SpillResult<()> {
     let (entry_reg_set, entry_spill_set) = if block.is_start_block() {
         (
             ctx.func
@@ -583,7 +586,7 @@ fn init_block_reg_and_spill_sets(ctx: &mut SpillProcessCtx<'_>, block: Block) ->
 
 /// Adds spill & reload instructions on block edges to couple the entry and exit register sets and
 /// spill sets of blocks
-fn connect_block_predecessors(ctx: &mut SpillProcessCtx<'_>, block: Block) -> SpillResult<()> {
+fn connect_block_predecessors(ctx: &mut SpillProcessCtx<'_, '_>, block: Block) -> SpillResult<()> {
     let preds = ctx
         .func
         .get_block_preds(block)
@@ -706,7 +709,7 @@ fn connect_block_predecessors(ctx: &mut SpillProcessCtx<'_>, block: Block) -> Sp
     Ok(())
 }
 
-pub fn perform_spilling(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()> {
+pub fn perform_spilling(ctx: &mut SpillProcessCtx<'_, '_>) -> SpillResult<()> {
     helpers::calculate_loop_use_sets(ctx)?;
     helpers::calculate_max_loop_pressure(ctx)?;
 

@@ -7,7 +7,7 @@ use crate::{
     block::Block,
     constant::{Const, ConstKind},
     function::Function,
-    value::{Value, ValueType},
+    value::{GlobalValue, GlobalValueData, Value, ValueType},
 };
 
 use fyrc_utils::EntityId;
@@ -286,6 +286,27 @@ impl SsaInstr for LoadConst {
 }
 
 #[derive(Debug, Clone)]
+pub struct LoadGlobal {
+    pub value: GlobalValue,
+}
+
+impl SsaInstr for LoadGlobal {
+    fn rewrite_value(&mut self, from: Value, to: Value) {}
+
+    fn get_name(&self) -> String {
+        "load_const".to_string()
+    }
+
+    fn get_args(&self) -> InstrArgs {
+        InstrArgs::from_iter([ArgKind::Str(format!("G({})", self.value.get_id()))])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![]
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Ret {
     pub val: Option<Value>,
 }
@@ -523,6 +544,7 @@ impl_from_instr_data!(
     Load,
     Store,
     LoadConst,
+    LoadGlobal,
     Ret,
     Cmp,
     Branch,
@@ -626,6 +648,7 @@ pub enum InstrData {
     Load(Load),
     Store(Store),
     LoadConst(LoadConst),
+    LoadGlobal(LoadGlobal),
     Ret(Ret),
     Cmp(Cmp),
     Branch(Branch),
@@ -651,6 +674,7 @@ impl Deref for InstrData {
             Self::Load(load) => load,
             Self::Store(store) => store,
             Self::LoadConst(lc) => lc,
+            Self::LoadGlobal(lg) => lg,
             Self::Ret(ret) => ret,
             Self::Cmp(cmp) => cmp,
             Self::Branch(branch) => branch,
@@ -676,6 +700,7 @@ impl DerefMut for InstrData {
             Self::Load(load) => load,
             Self::Store(store) => store,
             Self::LoadConst(lc) => lc,
+            Self::LoadGlobal(lg) => lg,
             Self::Ret(ret) => ret,
             Self::Cmp(cmp) => cmp,
             Self::Branch(branch) => branch,

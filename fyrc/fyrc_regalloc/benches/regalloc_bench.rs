@@ -16,13 +16,26 @@ pub fn regalloc_benchmarks(c: &mut Criterion) {
         (ret v3)
     )};
 
-    fyrc_regalloc::build_spilling_ctx!(func, ctx, 3);
-
     c.bench_function("Spilling", |b| {
         b.iter(|| {
             let func = func.clone();
             fyrc_regalloc::build_spilling_ctx!(func, ctx, 3);
             fyrc_regalloc::spilling::perform_spilling(&mut ctx).expect("spilling");
+        });
+    });
+
+    c.bench_function("Coloring", |b| {
+        b.iter(|| {
+            let func = func.clone();
+            fyrc_regalloc::build_spilling_ctx!(func, ctx, 3);
+            fyrc_regalloc::spilling::perform_spilling(&mut ctx).expect("spilling");
+            let dominator_tree = ctx.dom;
+            std::mem::drop(ctx);
+            let (liveness, func_data) =
+                fyrc_ssa_passes::test_utils::get_pass::<fyrc_ssa_passes::LivenessAnalysis>(func);
+            let coloring =
+                fyrc_regalloc::coloring::perform_coloring(&func_data, dominator_tree, &liveness)
+                    .expect("coloring");
         });
     });
 }

@@ -18,6 +18,8 @@ pub enum BuilderError {
     FunctionNotFound,
     #[error("a function resource was not found")]
     FunctionResourceMissing,
+    #[error("a given global value was not found")]
+    GlobalValueMissing,
     #[error("incorrect number of arguments received for function")]
     IncorrectFunctionArgs,
     #[error("argument of invalid type received for function")]

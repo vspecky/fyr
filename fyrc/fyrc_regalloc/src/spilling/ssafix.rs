@@ -257,7 +257,7 @@ mod idomf {
 }
 
 fn find_def(
-    ctx: &mut SpillProcessCtx<'_>,
+    ctx: &mut SpillProcessCtx<'_, '_>,
     defs: &mut FxHashMap<DefUseType, Value>,
     dom_frontier: &FxHashSet<Block>,
     value: Value,
@@ -392,7 +392,7 @@ fn find_def(
     find_def(ctx, defs, dom_frontier, value, dom_parent, None)
 }
 
-pub(super) fn fix_ssa(ctx: &mut SpillProcessCtx<'_>) -> SpillResult<()> {
+pub(super) fn fix_ssa(ctx: &mut SpillProcessCtx<'_, '_>) -> SpillResult<()> {
     let new_def_values = std::mem::take(&mut ctx.inserted_instrs);
 
     let dj_graph = idomf::construct_dj_graph(ctx.func, ctx.dom)?;

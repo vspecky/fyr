@@ -16,6 +16,8 @@ pub enum LoopForestError {
     ForestBlockNotFound,
     #[error("there was an error when interacting with the function data")]
     FunctionError,
+    #[error("loop children not found for block")]
+    LoopChildrenNotFound,
 }
 
 struct LoopNestingForestBuilder<'a> {
@@ -104,6 +106,23 @@ impl<'a> LoopNestingForestBuilder<'a> {
             self.find_loop(potential_header)?;
         }
 
+        let mut loop_depths = DenseMap::with_prefilled(self.func.blocks.len());
+        let mut stack = self
+            .roots
+            .iter()
+            .map(|block| (*block, 0usize))
+            .collect::<Vec<_>>();
+
+        while let Some((parent, parent_depth)) = stack.pop() {
+            loop_depths.set(parent, parent_depth);
+            let children = self
+                .forest
+                .get(parent)
+                .ok_or_else(|| report!(LoopForestError::LoopChildrenNotFound))?;
+
+            stack.extend(children.iter().map(|child| (*child, parent_depth + 1)));
+        }
+
         Ok(LoopNestingForest {
             all_loop_headers: self
                 .forest
@@ -113,6 +132,7 @@ impl<'a> LoopNestingForestBuilder<'a> {
                 .collect(),
             forest: self.forest,
             top_level: self.roots,
+            loop_depth: loop_depths,
         })
     }
 }
@@ -121,6 +141,7 @@ pub struct LoopNestingForest {
     pub forest: DenseMap<Block, FxHashSet<Block>>,
     pub top_level: FxHashSet<Block>,
     pub all_loop_headers: FxHashSet<Block>,
+    pub loop_depth: DenseMap<Block, usize>,
 }
 
 impl crate::Pass for LoopNestingForest {

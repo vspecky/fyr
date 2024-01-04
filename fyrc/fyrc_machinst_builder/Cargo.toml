@@ -1,0 +1,14 @@
+[package]
+name = "fyrc_machinst_builder"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+error-stack = "0.4.0"
+fyrc_machinst = { version = "0.1.0", path = "../fyrc_machinst" }
+fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa" }
+fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
+fxhash = "0.2.1"
+thiserror = "1.0.47"

@@ -19,7 +19,7 @@ mod loop_uses {
     use super::*;
 
     fn process_block(
-        ctx: &mut SpillProcessCtx<'_>,
+        ctx: &mut SpillProcessCtx<'_, '_>,
         parent_unused_set: &mut FxHashSet<Value>,
         block: Block,
     ) -> SpillResult<()> {
@@ -83,7 +83,7 @@ mod loop_uses {
     }
 
     pub(in crate::spilling) fn calculate_loop_use_sets(
-        ctx: &mut SpillProcessCtx<'_>,
+        ctx: &mut SpillProcessCtx<'_, '_>,
     ) -> SpillResult<()> {
         for &block in &ctx.loop_forest.top_level {
             process_block(ctx, &mut FxHashSet::default(), block)?;
@@ -97,7 +97,7 @@ mod loop_pressure {
     use super::*;
 
     fn calculate_block_max_pressure(
-        ctx: &mut SpillProcessCtx<'_>,
+        ctx: &mut SpillProcessCtx<'_, '_>,
         block: Block,
     ) -> SpillResult<usize> {
         let mut max_pressure = ctx
@@ -122,7 +122,7 @@ mod loop_pressure {
     }
 
     pub(in crate::spilling) fn calculate_max_loop_pressure(
-        ctx: &mut SpillProcessCtx<'_>,
+        ctx: &mut SpillProcessCtx<'_, '_>,
     ) -> SpillResult<()> {
         for &block in &ctx.loop_forest.top_level {
             calculate_block_max_pressure(ctx, block)?;

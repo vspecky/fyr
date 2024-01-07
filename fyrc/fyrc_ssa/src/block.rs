@@ -100,6 +100,10 @@ impl BlockData {
         std::iter::once(self.exit).chain(self.instrs.iter().rev().copied())
     }
 
+    pub fn iter_instr_except_exit(&self) -> impl Iterator<Item = Instr> + '_ {
+        self.instrs.iter().copied()
+    }
+
     pub fn append_instr(&mut self, ins: Instr) {
         self.instrs.push(ins);
     }

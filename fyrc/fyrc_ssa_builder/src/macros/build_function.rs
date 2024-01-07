@@ -34,10 +34,10 @@ macro_rules! __instr {
         let $res = $builder.ins().$ins($($arg),+).expect("instruction addition");
     };
 
-    ($builder:ident: brs $cond:ident, $then:ident, $else:ident) => {
+    ($builder:ident: brs $condres:ident, $then:ident, $else:ident) => {
         $builder
             .ins()
-            .brs(Cond::$cond, $then, $else)
+            .br($condres, $then, $else)
             .expect("brs instr");
     };
 
@@ -55,7 +55,7 @@ macro_rules! build_function {
         use $crate::__private::fyrc_ssa::{
             function::InstructionSet,
             value::ValueType,
-            instr::Cond,
+            instr::Cond::*,
         };
         use $crate::module::SsaModule;
 

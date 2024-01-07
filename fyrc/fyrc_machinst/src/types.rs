@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Register(pub u8);
 
 impl Register {
@@ -14,6 +14,10 @@ impl Register {
     #[inline]
     pub fn is_hi(&self) -> bool {
         self.0 >= 8
+    }
+
+    pub fn reg_id(&self) -> u8 {
+        self.0
     }
 }
 

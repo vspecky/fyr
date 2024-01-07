@@ -4,6 +4,7 @@ use crate::{
     func::MachFunc,
     hop::MachHop,
     types::{make_thumb_imm, make_thumb_simm, MachineCode, Register},
+    value::MachGlobalValue,
 };
 
 macro_rules! repr16 {
@@ -23,6 +24,18 @@ macro_rules! repr16 {
 
         res
     }};
+}
+
+macro_rules! impl_from_instr_for_instr_data {
+    ($($instr:ident),+) => {
+        $(
+            impl From<$instr> for ThumbMachinstData {
+                fn from(ins: $instr) -> Self {
+                    Self::$instr(ins)
+                }
+            }
+        )+
+    };
 }
 
 make_thumb_imm! {
@@ -49,45 +62,102 @@ pub enum LdStrFlag {
 }
 
 #[derive(Debug, Clone)]
-pub enum BranchDest<T> {
+pub enum BranchDestKind {
     Block(MachBlock),
     Hop(MachHop),
-    Offset(T),
+    Local,
 }
 
-impl<T> From<MachBlock> for BranchDest<T> {
+impl From<MachBlock> for BranchDestKind {
     fn from(value: MachBlock) -> Self {
         Self::Block(value)
     }
 }
 
-impl<T> From<MachHop> for BranchDest<T> {
+impl From<MachHop> for BranchDestKind {
     fn from(value: MachHop) -> Self {
         Self::Hop(value)
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct BranchDest<T> {
+    pub kind: BranchDestKind,
+    pub offset: Option<T>,
+}
+
+impl<T> From<MachBlock> for BranchDest<T> {
+    fn from(value: MachBlock) -> Self {
+        Self {
+            kind: value.into(),
+            offset: None,
+        }
+    }
+}
+
+impl<T> From<MachHop> for BranchDest<T> {
+    fn from(value: MachHop) -> Self {
+        Self {
+            kind: value.into(),
+            offset: None,
+        }
+    }
+}
+
 impl<T: From<i16>> From<i16> for BranchDest<T> {
     fn from(value: i16) -> Self {
-        Self::Offset(T::from(value))
+        Self {
+            kind: BranchDestKind::Local,
+            offset: Some(T::from(value)),
+        }
+    }
+}
+
+impl<T> BranchDest<T> {
+    pub fn set_offset(&mut self, offset: T) {
+        self.offset = Some(offset);
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum ConstRef<T> {
+pub enum ValueRefKind {
     Const(MachConst),
-    Offset(T),
+    Global(MachGlobalValue),
 }
 
-impl<T> From<MachConst> for ConstRef<T> {
+impl From<MachConst> for ValueRefKind {
     fn from(value: MachConst) -> Self {
         Self::Const(value)
     }
 }
 
-impl<T: From<u16>> From<u16> for ConstRef<T> {
-    fn from(value: u16) -> Self {
-        Self::Offset(T::from(value))
+impl From<MachGlobalValue> for ValueRefKind {
+    fn from(value: MachGlobalValue) -> Self {
+        Self::Global(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ValueRef<T> {
+    pub kind: ValueRefKind,
+    pub offset: Option<T>,
+}
+
+impl<T> From<MachConst> for ValueRef<T> {
+    fn from(value: MachConst) -> Self {
+        Self {
+            kind: value.into(),
+            offset: None,
+        }
+    }
+}
+
+impl<T> From<MachGlobalValue> for ValueRef<T> {
+    fn from(value: MachGlobalValue) -> Self {
+        Self {
+            kind: value.into(),
+            offset: None,
+        }
     }
 }
 
@@ -333,11 +403,11 @@ impl AluOp {
 #[derive(Debug, Clone)]
 pub struct Alu {
     /// Opcode
-    op: AluOp,
+    pub op: AluOp,
     /// Source register 2
-    rs: Register,
+    pub rs: Register,
     /// Source/destination register
-    rd: Register,
+    pub rd: Register,
 }
 
 impl MachineCode for Alu {
@@ -423,21 +493,20 @@ pub struct PcRelativeLoad {
     /// Destination register
     pub rd: Register,
     /// Immediate value
-    pub imm: ConstRef<Word8>,
+    pub imm: ValueRef<Word8>,
 }
 
 impl MachineCode for PcRelativeLoad {
     type Output = u16;
 
     fn to_machinst_bits(&self) -> Option<Vec<Self::Output>> {
-        match &self.imm {
-            ConstRef::Offset(imm) => Some(vec![repr16!(
+        self.imm.offset.map(|imm| {
+            vec![repr16!(
                 (5: 0b01001)
                 (3: self.rd.thumb())
                 (8: imm.bits())
-            )]),
-            ConstRef::Const(_) => None,
-        }
+            )]
+        })
     }
 }
 
@@ -882,14 +951,13 @@ impl MachineCode for CondBranch {
     type Output = u16;
 
     fn to_machinst_bits(&self) -> Option<Vec<Self::Output>> {
-        match &self.soffset8 {
-            BranchDest::Offset(offset) => Some(vec![repr16!(
+        self.soffset8.offset.map(|offset| {
+            vec![repr16!(
                 (4: 0b1101)
                 (4: self.cond.bits())
                 (8: offset.bits())
-            )]),
-            BranchDest::Block(_) | BranchDest::Hop(_) => None,
-        }
+            )]
+        })
     }
 }
 
@@ -937,13 +1005,12 @@ impl MachineCode for UncondBranch {
     type Output = u16;
 
     fn to_machinst_bits(&self) -> Option<Vec<Self::Output>> {
-        match &self.soffset11 {
-            BranchDest::Offset(offset) => Some(vec![repr16!(
+        self.soffset11.offset.map(|offset| {
+            vec![repr16!(
                 (5: 0b11100)
                 (11: offset.bits())
-            )]),
-            BranchDest::Block(_) | BranchDest::Hop(_) => None,
-        }
+            )]
+        })
     }
 }
 
@@ -1023,6 +1090,28 @@ impl MachineCode for BranchWithLink {
     fn len(&self) -> usize {
         2
     }
+}
+
+impl_from_instr_for_instr_data! {
+    MovShReg,
+    AddSub,
+    MovCmpAddSubImm,
+    Alu,
+    HiRegOpsBx,
+    PcRelativeLoad,
+    LdStrRoff,
+    LdStSeBHw,
+    LdStrImmOff,
+    LdStrHw,
+    SpRelativeLdStr,
+    LdAddr,
+    OffsetSP,
+    PushPopRegs,
+    MultipleLdStr,
+    CondBranch,
+    Swi,
+    UncondBranch,
+    BranchWithLink
 }
 
 #[derive(Debug, Clone)]

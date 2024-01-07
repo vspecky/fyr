@@ -109,7 +109,7 @@ impl SsaModule {
             incomplete_phis: FxHashMap::default(),
             phis: DenseMap::new(),
             const_map: FxHashMap::default(),
-            current_block: Block::default(),
+            current_block: Block::START,
         })
     }
 

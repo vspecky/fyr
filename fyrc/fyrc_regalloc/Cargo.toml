@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 error-stack = "0.4.0"
 fxhash = "0.2.1"
+fyrc_machinst = { version = "0.1.0", path = "../fyrc_machinst" }
 fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa", features = ["viz"] }
 fyrc_ssa_builder = { version = "0.1.0", path = "../fyrc_ssa_builder" }
 fyrc_ssa_passes = { version = "0.1.0", path = "../fyrc_ssa_passes" }

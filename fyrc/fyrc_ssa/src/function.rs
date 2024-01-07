@@ -153,6 +153,13 @@ impl FunctionData {
             .ok_or_else(|| report!(SsaError::ValueNotFound))
     }
 
+    pub fn get_value_type(&self, value: Value) -> SsaResult<ValueType> {
+        self.values
+            .get(value)
+            .map(|data| data.value_type)
+            .ok_or_else(|| report!(SsaError::ValueNotFound))
+    }
+
     pub fn get_instr(&self, instr: Instr) -> SsaResult<&InstrData> {
         self.instrs
             .get(instr)

@@ -52,7 +52,7 @@ macro_rules! __tasm_internal {
     // Move a value from a register in the range 0-7 to a register in the range 8-15.
     (MOV ^$hd:expr, %$rs:expr) => {
         HiRegOpsBx {
-            op: HiRegOpsBx::Mov,
+            op: HiRegOpsBxOp::Mov,
             h1: false,
             h2: true,
             rs_hs: $rs,
@@ -214,7 +214,7 @@ macro_rules! __tasm_internal {
             sign_flag: if $word7 < 0 {
                 OffsetSPSignFlag::Negative
             } else {
-                OffsetSPSignFlag::Positive,
+                OffsetSPSignFlag::Positive
             },
             imm: Word7::from($word7.abs() as u16),
         }

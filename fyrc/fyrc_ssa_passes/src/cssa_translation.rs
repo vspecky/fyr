@@ -460,8 +460,8 @@ mod tests {
             (c1 = const32 10)
             (x1 = add x2, c1)
             (#vdef varx x1)
-            (cmps x2, x1)
-            (brs LessThan, thenb, finalb)
+            (cr = icmp x2, x1, Slt)
+            (brs cr, thenb, finalb)
 
             (#switch thenb)
             (#seal thenb)
@@ -489,8 +489,8 @@ mod tests {
             (c1 = const32 10)
             (x1 = add x3, c1)
             (#vdef varx x3)
-            (cmps x3, x1)
-            (brs LessThan, headerb, jumpb)
+            (cr = icmp x3, x1, Slt)
+            (brs cr, headerb, jumpb)
 
             (#switch jumpb)
             (#seal jumpb)
@@ -504,8 +504,8 @@ mod tests {
             (x2 = const32 50)
             (#vdef varx x2)
             (c3 = const32 60)
-            (cmps x2, c3)
-            (brs GreaterThan, thenb, elseb)
+            (cr = icmp x2, c3, Slt)
+            (brs cr, thenb, elseb)
 
             (#switch thenb)
             (#seal thenb)

@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use error_stack::{report, ResultExt};
 use fxhash::FxHashSet;
+use fyrc_machinst::types::Register;
 use fyrc_ssa::{
     block::Block,
     function::{FunctionData, InstructionSet},
@@ -41,8 +42,33 @@ pub enum ColoringError {
 
 type ColoringResult<T> = Result<T, error_stack::Report<ColoringError>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Register(u8);
+/// Stores the free registers at a program point as a bitset
+#[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
+pub struct FreeRegisters(u16);
+
+impl FreeRegisters {
+    pub fn new(regs: impl IntoIterator<Item = Register>) -> Self {
+        let mut free = 0u16;
+        for reg in regs.into_iter() {
+            free |= 0b1 << reg.0;
+        }
+
+        Self(free)
+    }
+
+    pub fn get_free_regs(&self) -> Vec<Register> {
+        let mut free = self.0;
+        let mut regs = Vec::new();
+        for off in 0..16 {
+            if free & 0b1 > 0 {
+                regs.push(Register(off));
+            }
+            free = free >> 1;
+        }
+
+        regs
+    }
+}
 
 #[derive(Debug)]
 struct RegisterFile {
@@ -98,7 +124,13 @@ impl RegisterFile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SpillSlot(u16);
+pub struct SpillSlot(pub u16);
+
+impl SpillSlot {
+    pub fn slot_id(&self) -> u16 {
+        self.0
+    }
+}
 
 #[derive(Debug)]
 struct SpillSlotFile {
@@ -165,12 +197,26 @@ impl ValueAllocType {
     fn is_unallocated(&self) -> bool {
         matches!(self, Self::Unallocated)
     }
+
+    pub fn get_register(&self) -> Option<Register> {
+        match self {
+            Self::Register(reg) => Some(*reg),
+            Self::SpillSlot(_) | Self::Unallocated => None,
+        }
+    }
+
+    pub fn get_spill_slot(&self) -> Option<SpillSlot> {
+        match self {
+            Self::SpillSlot(slot) => Some(*slot),
+            Self::Register(_) | Self::Unallocated => None,
+        }
+    }
 }
 
 struct AllocFile<'a> {
     value_data: &'a DenseMap<Value, ValueData>,
     allocations: DenseMap<Value, ValueAllocType>,
-    free_regs: DenseMap<Instr, Option<Register>>,
+    free_regs: DenseMap<Instr, FreeRegisters>,
     reg_file: RegisterFile,
     spill_slot_file: SpillSlotFile,
 }
@@ -252,12 +298,14 @@ impl<'a> AllocFile<'a> {
     }
 
     fn set_instr_free_register(&mut self, instr: Instr) {
-        self.free_regs
-            .set(instr, self.reg_file.free_regs.first().copied());
+        self.free_regs.set(
+            instr,
+            FreeRegisters::new(self.reg_file.free_regs.iter().copied()),
+        );
     }
 
-    fn done(self) -> RegallocResult {
-        RegallocResult {
+    fn done(self) -> RegallocOutput {
+        RegallocOutput {
             total_regs: self.reg_file.total_regs,
             free_regs: self.free_regs,
             total_spill_slots: self.spill_slot_file.total_slots,
@@ -266,18 +314,28 @@ impl<'a> AllocFile<'a> {
     }
 }
 
-pub struct RegallocResult {
+pub struct RegallocOutput {
     pub total_regs: u8,
     pub total_spill_slots: u16,
     pub allocations: DenseMap<Value, ValueAllocType>,
-    pub free_regs: DenseMap<Instr, Option<Register>>,
+    pub free_regs: DenseMap<Instr, FreeRegisters>,
+}
+
+impl RegallocOutput {
+    #[inline]
+    pub fn get_alloc(&self, value: Value) -> ValueAllocType {
+        self.allocations
+            .get(value)
+            .copied()
+            .unwrap_or(ValueAllocType::Unallocated)
+    }
 }
 
 pub fn perform_coloring(
     func: &FunctionData,
     dom: &DominatorTree,
     liveness: &LivenessAnalysis,
-) -> ColoringResult<RegallocResult> {
+) -> ColoringResult<RegallocOutput> {
     let mut alloc_file = AllocFile::new(func);
     let mut stack = vec![Block::START];
 

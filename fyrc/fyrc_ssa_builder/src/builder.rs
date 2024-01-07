@@ -551,10 +551,14 @@ pub struct FuncInstrBuilder<'short, 'long: 'short> {
     builder: &'short mut FunctionBuilder<'long>,
 }
 
-macro_rules! defbuild_3 {
-    ($name:ident, $name_str:literal, $instr:ident) => {
+macro_rules! bin_alu {
+    ($name:ident, $instr:ident) => {
         pub fn $name(&mut self, a: Value, b: Value) -> BuilderResult<Value> {
-            let err = format!("when trying to add '{}' instruction", $name_str);
+            let err = format!(
+                "when trying to add '{}' instruction",
+                stringify!($instr).to_ascii_lowercase()
+            );
+
             let value_type = self
                 .builder
                 .func_data
@@ -563,10 +567,47 @@ macro_rules! defbuild_3 {
                 .attach_printable_lazy(|| err.clone())?
                 .value_type;
 
-            self.build(instr::$instr { rs: a, rn: b }, value_type)
+            self.build(
+                instr::AluBinaryOp {
+                    op: instr::AluBinaryOpKind::$instr,
+                    rs: a,
+                    rn: b,
+                },
+                value_type,
+            )
+            .attach_printable_lazy(|| err.clone())?
+            .ok_or_else(|| report!(BuilderError::MissingResult))
+            .attach_printable_lazy(|| err.clone())
+        }
+    };
+}
+
+macro_rules! un_alu {
+    ($name:ident, $instr:ident) => {
+        pub fn $name(&mut self, a: Value) -> BuilderResult<Value> {
+            let err = format!(
+                "when trying to add '{}' instruction",
+                stringify!($instr).to_ascii_lowercase()
+            );
+
+            let value_type = self
+                .builder
+                .func_data
+                .get_value(a)
+                .change_context(BuilderError::FunctionResourceMissing)
                 .attach_printable_lazy(|| err.clone())?
-                .ok_or_else(|| report!(BuilderError::MissingResult))
-                .attach_printable_lazy(|| err.clone())
+                .value_type;
+
+            self.build(
+                instr::AluUnaryOp {
+                    op: instr::AluUnaryOpKind::$instr,
+                    rs: a,
+                },
+                value_type,
+            )
+            .attach_printable_lazy(|| err.clone())?
+            .ok_or_else(|| report!(BuilderError::MissingResult))
+            .attach_printable_lazy(|| err.clone())
         }
     };
 }
@@ -634,13 +675,18 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
         Ok(result)
     }
 
-    defbuild_3!(add, "add", Add);
-    defbuild_3!(adc, "adc", Adc);
-    defbuild_3!(sub, "sub", Sub);
-    defbuild_3!(mul, "mul", Mul);
-    defbuild_3!(lsl, "lsl", Lsl);
-    defbuild_3!(lsr, "lsr", Lsr);
-    defbuild_3!(asl, "asl", Asl);
+    bin_alu!(add, Add);
+    bin_alu!(sub, Sub);
+    bin_alu!(mul, Mul);
+    bin_alu!(lsl, Lsl);
+    bin_alu!(lsr, Lsr);
+    bin_alu!(asr, Asr);
+    bin_alu!(and, And);
+    bin_alu!(orr, Orr);
+    bin_alu!(xor, Xor);
+
+    un_alu!(neg, Neg);
+    un_alu!(not, Not);
 
     pub fn load(
         &mut self,
@@ -678,78 +724,24 @@ impl<'short, 'long> FuncInstrBuilder<'short, 'long> {
         Ok(())
     }
 
-    pub fn cmps(&mut self, rs: Value, rn: Value) -> BuilderResult<()> {
-        self.build(
-            instr::Cmp {
-                rs,
-                rn,
-                result_cond: None,
-            },
-            ValueType::Int8,
-        )
-        .attach_printable("when trying to add 'cmp_status' instruction")?;
-
-        Ok(())
+    pub fn icmp(&mut self, rs: Value, rn: Value, cond: instr::Cond) -> BuilderResult<Value> {
+        let err = "when trying to add 'icmp' instruction";
+        self.build(instr::ICmp { rs, rn, cond }, ValueType::Int8)
+            .attach_printable(err)?
+            .ok_or_else(|| report!(BuilderError::MissingResult))
+            .attach_printable(err)
     }
 
-    pub fn cmpb(&mut self, rs: Value, rn: Value, cond: instr::Cond) -> BuilderResult<Value> {
-        let err = "when trying to add 'cmp_bool' instruction";
-        self.build(
-            instr::Cmp {
-                rs,
-                rn,
-                result_cond: Some(cond),
-            },
-            ValueType::Int8,
-        )
-        .attach_printable(err)?
-        .ok_or_else(|| report!(BuilderError::MissingResult))
-        .attach_printable(err)
-    }
-
-    pub fn brs(
-        &mut self,
-        cond: instr::Cond,
-        then_block: Block,
-        else_block: Block,
-    ) -> BuilderResult<()> {
+    pub fn br(&mut self, value: Value, then_block: Block, else_block: Block) -> BuilderResult<()> {
         self.build(
             instr::Branch {
-                kind: instr::BranchKind::Status(cond),
+                value,
                 then_block,
                 else_block,
             },
             ValueType::Int8,
         )
-        .attach_printable("when trying to add 'br_status' instruction")?;
-
-        Ok(())
-    }
-
-    pub fn brz(&mut self, val: Value, then_block: Block, else_block: Block) -> BuilderResult<()> {
-        self.build(
-            instr::Branch {
-                kind: instr::BranchKind::Zero(val),
-                then_block,
-                else_block,
-            },
-            ValueType::Int8,
-        )
-        .attach_printable("when trying to add 'brz' instruction")?;
-
-        Ok(())
-    }
-
-    pub fn brnz(&mut self, val: Value, then_block: Block, else_block: Block) -> BuilderResult<()> {
-        self.build(
-            instr::Branch {
-                kind: instr::BranchKind::NotZero(val),
-                then_block,
-                else_block,
-            },
-            ValueType::Int8,
-        )
-        .attach_printable("when trying to add 'brz' instruction")?;
+        .attach_printable("when trying to add 'br' instruction")?;
 
         Ok(())
     }
@@ -894,9 +886,12 @@ mod tests {
         let inside_while = b.make_block().expect("def inside_while");
         let v = b.use_variable(var).expect("use var while_header");
         let c67 = b.ins().const32(67).expect("c67");
-        b.ins().cmps(v, c67).expect("while_header cmp");
+        let condres = b
+            .ins()
+            .icmp(v, c67, instr::Cond::Eq)
+            .expect("while_header cmp");
         b.ins()
-            .brs(instr::Cond::LessThan, inside_while, continuation)
+            .br(condres, inside_while, continuation)
             .expect("while_header brs");
 
         b.seal_block(continuation).expect("seal continuation");
@@ -906,11 +901,14 @@ mod tests {
             .expect("switch inside_while");
         let c10 = b.ins().const32(10).expect("def c10");
         let c11 = b.ins().const32(11).expect("def c11");
-        b.ins().cmps(c10, c11).expect("cmps c10 c11");
         let inside_then = b.make_block().expect("make inside_then");
         let inside_else = b.make_block().expect("make inside_else");
+        let condres = b
+            .ins()
+            .icmp(c10, c11, instr::Cond::Eq)
+            .expect("cmps c10 c11");
         b.ins()
-            .brs(instr::Cond::LessThan, inside_then, inside_else)
+            .br(condres, inside_then, inside_else)
             .expect("brs inside_while");
 
         b.seal_block(inside_then).expect("seal inside_then");
@@ -973,9 +971,12 @@ mod tests {
         let inside_while = b.make_block().expect("def inside_while");
         let v = b.use_variable(var).expect("use var while_header");
         let c67 = b.ins().const32(67).expect("c67");
-        b.ins().cmps(v, c67).expect("while_header cmp");
+        let condres = b
+            .ins()
+            .icmp(v, c67, instr::Cond::Eq)
+            .expect("while_header cmp");
         b.ins()
-            .brs(instr::Cond::LessThan, inside_while, continuation)
+            .br(condres, inside_while, continuation)
             .expect("while_header brs");
 
         b.seal_block(continuation).expect("seal continuation");
@@ -985,11 +986,14 @@ mod tests {
             .expect("switch inside_while");
         let c10 = b.ins().const32(10).expect("def c10");
         let c11 = b.ins().const32(11).expect("def c11");
-        b.ins().cmps(c10, c11).expect("cmps c10 c11");
         let inside_then = b.make_block().expect("make inside_then");
         let inside_else = b.make_block().expect("make inside_else");
+        let condres = b
+            .ins()
+            .icmp(c10, c11, instr::Cond::Eq)
+            .expect("cmps c10 c11");
         b.ins()
-            .brs(instr::Cond::LessThan, inside_then, inside_else)
+            .br(condres, inside_then, inside_else)
             .expect("brs inside_while");
 
         b.seal_block(inside_then).expect("seal inside_then");

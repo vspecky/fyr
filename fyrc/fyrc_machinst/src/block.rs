@@ -25,3 +25,9 @@ impl EntityId for MachBlock {
 pub struct MachBlockData {
     pub instrs: Vec<Machinst>,
 }
+
+impl MachBlockData {
+    pub fn new() -> Self {
+        Self { instrs: Vec::new() }
+    }
+}

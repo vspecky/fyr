@@ -684,7 +684,7 @@ macro_rules! __tasm_internal {
         PushPopRegs {
             ld_str_flag: LdStrFlag::Store,
             pc_lr_bit: true,
-            rlist: $rlist,
+            rlist: $rlist.into(),
         }
     };
 
@@ -694,7 +694,7 @@ macro_rules! __tasm_internal {
         PushPopRegs {
             ld_str_flag: LdStrFlag::Store,
             pc_lr_bit: false,
-            rlist: $rlist,
+            rlist: $rlist.into(),
         }
     };
 
@@ -705,7 +705,7 @@ macro_rules! __tasm_internal {
         PushPopRegs {
             ld_str_flag: LdStrFlag::Load,
             pc_lr_bit: true,
-            rlist: $rlist,
+            rlist: $rlist.into(),
         }
     };
 

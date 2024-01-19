@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 
 use error_stack::{report, ResultExt};
 use fxhash::FxHashSet;
@@ -10,7 +10,10 @@ use fyrc_ssa::{
     value::{Value, ValueData},
 };
 use fyrc_ssa_passes::{DominatorTree, LivenessAnalysis};
-use fyrc_utils::DenseMap;
+use fyrc_utils::{
+    consts::{ABI_ARGS_IN_REGS, ABI_NUM_CALLEE_SAVED_REGS},
+    DenseMap,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ColoringError {
@@ -56,6 +59,10 @@ impl FreeRegisters {
         Self(free)
     }
 
+    pub fn contains(&self, reg: Register) -> bool {
+        self.0 & (0b1 << reg.thumb()) > 0
+    }
+
     pub fn get_free_regs(&self) -> Vec<Register> {
         let mut free = self.0;
         let mut regs = Vec::new();
@@ -63,10 +70,14 @@ impl FreeRegisters {
             if free & 0b1 > 0 {
                 regs.push(Register(off));
             }
-            free = free >> 1;
+            free >>= 1;
         }
 
         regs
+    }
+
+    pub fn mark_occupied(&mut self, reg: Register) {
+        self.0 = self.0 & !(0b1 << reg.thumb());
     }
 }
 
@@ -130,26 +141,34 @@ impl SpillSlot {
     pub fn slot_id(&self) -> u16 {
         self.0
     }
+
+    pub fn offset(self, offset: u16) -> Self {
+        Self(self.0 + offset)
+    }
 }
 
 #[derive(Debug)]
 struct SpillSlotFile {
     total_slots: u16,
-    free_slots: BTreeSet<SpillSlot>,
+    stack_arg_count: u16,
+    free_slots: VecDeque<SpillSlot>,
     allocated_slots: FxHashSet<SpillSlot>,
 }
 
 impl SpillSlotFile {
-    fn new() -> Self {
+    fn new(stack_arg_count: u16) -> Self {
         Self {
-            total_slots: 0,
-            free_slots: BTreeSet::new(),
-            allocated_slots: FxHashSet::default(),
+            // We set the total slots to 5 to account for r4-r7 (4) callee saved registers
+            // and LR.
+            total_slots: 5,
+            stack_arg_count,
+            free_slots: VecDeque::new(),
+            allocated_slots: FxHashSet::from_iter((0..5).map(SpillSlot)),
         }
     }
 
     fn allocate(&mut self) -> SpillSlot {
-        if let Some(slot) = self.free_slots.pop_last() {
+        if let Some(slot) = self.free_slots.pop_back() {
             self.allocated_slots.insert(slot);
             slot
         } else {
@@ -162,7 +181,22 @@ impl SpillSlotFile {
 
     fn free(&mut self, slot: SpillSlot) -> ColoringResult<()> {
         if self.allocated_slots.remove(&slot) {
-            self.free_slots.insert(slot);
+            // here we prefer pushing to the front of the deque if the stack slot is one in which
+            // the arguments of the function were passed in. This causes the allocation algorithm
+            // to actively discourage allocating the arg stack slots to new memory variables.
+            //
+            // The reason we do this is cuz initially when new stack slots are added, they start
+            // from 0 i.e. the closest to the stack pointer. So the initial stack slots allocated
+            // to stack arguments are taken to be the closest to the stack pointer which is actually
+            // not the case practically since the stack args are stack pushed by the caller before the
+            // callee moves the stack pointer to make space for additional stack slots i.e. they are
+            // actually the farthest from the stack pointer in practice. Hence we discourage picking
+            // these slots as these are going to be re-Id'd to be the farthest slots anyways.
+            if slot.slot_id() < self.stack_arg_count + ABI_NUM_CALLEE_SAVED_REGS as u16 {
+                self.free_slots.push_front(slot);
+            } else {
+                self.free_slots.push_back(slot);
+            }
             Ok(())
         } else {
             Err(report!(ColoringError::FreedNonAllocatedSpillSlot))
@@ -175,7 +209,8 @@ impl SpillSlotFile {
     }
 
     fn set_allocated(&mut self, slot: SpillSlot) -> ColoringResult<()> {
-        if self.free_slots.remove(&slot) {
+        if self.free_slots.contains(&slot) {
+            self.free_slots.retain(|ss| ss != &slot);
             self.allocated_slots.insert(slot);
             Ok(())
         } else {
@@ -216,7 +251,8 @@ impl ValueAllocType {
 struct AllocFile<'a> {
     value_data: &'a DenseMap<Value, ValueData>,
     allocations: DenseMap<Value, ValueAllocType>,
-    free_regs: DenseMap<Instr, FreeRegisters>,
+    pre_instr_free_regs: DenseMap<Instr, FreeRegisters>,
+    block_end_free_regs: DenseMap<Block, FreeRegisters>,
     reg_file: RegisterFile,
     spill_slot_file: SpillSlotFile,
 }
@@ -226,9 +262,12 @@ impl<'a> AllocFile<'a> {
         Self {
             value_data: &func.values,
             allocations: DenseMap::with_prefilled(func.values.len()),
-            free_regs: DenseMap::with_prefilled(func.instrs.len()),
+            pre_instr_free_regs: DenseMap::with_prefilled(func.instrs.len()),
+            block_end_free_regs: DenseMap::with_prefilled(func.blocks.len()),
             reg_file: RegisterFile::new(func.signature.isa),
-            spill_slot_file: SpillSlotFile::new(),
+            spill_slot_file: SpillSlotFile::new(
+                func.arg_values.len().saturating_sub(ABI_ARGS_IN_REGS) as u16,
+            ),
         }
     }
 
@@ -297,17 +336,46 @@ impl<'a> AllocFile<'a> {
         Ok(())
     }
 
-    fn set_instr_free_register(&mut self, instr: Instr) {
-        self.free_regs.set(
+    fn set_instr_free_registers(&mut self, instr: Instr) {
+        self.pre_instr_free_regs.set(
             instr,
             FreeRegisters::new(self.reg_file.free_regs.iter().copied()),
         );
     }
 
-    fn done(self) -> RegallocOutput {
+    fn set_block_end_free_registers(&mut self, block: Block) {
+        self.block_end_free_regs.set(
+            block,
+            FreeRegisters::new(self.reg_file.free_regs.iter().copied()),
+        );
+    }
+
+    /// This function rotates the stack slot IDs counter-clockwise by the number of arguments
+    /// to the function that are passed on the stack so that the stack slots assigned to stack
+    /// args are the farthest ones to the left (with the argument order on the stack being the
+    /// same as the prototype). The reason we do this is explained in the stack slot file free()
+    /// function above.
+    fn shift_stack_slots(&mut self) {
+        let stack_args_count = self.spill_slot_file.stack_arg_count as i16 + 5;
+        let total_slots = self.spill_slot_file.total_slots as i16;
+
+        if stack_args_count == 0 {
+            return;
+        }
+
+        for alloc_type in self.allocations.values_mut() {
+            if let ValueAllocType::SpillSlot(ss) = alloc_type {
+                *ss = SpillSlot(((ss.slot_id() as i16 - stack_args_count) % total_slots) as u16);
+            }
+        }
+    }
+
+    fn done(mut self) -> RegallocOutput {
+        self.shift_stack_slots();
         RegallocOutput {
             total_regs: self.reg_file.total_regs,
-            free_regs: self.free_regs,
+            pre_instr_free_regs: self.pre_instr_free_regs,
+            block_end_free_regs: self.block_end_free_regs,
             total_spill_slots: self.spill_slot_file.total_slots,
             allocations: self.allocations,
         }
@@ -318,7 +386,8 @@ pub struct RegallocOutput {
     pub total_regs: u8,
     pub total_spill_slots: u16,
     pub allocations: DenseMap<Value, ValueAllocType>,
-    pub free_regs: DenseMap<Instr, FreeRegisters>,
+    pub pre_instr_free_regs: DenseMap<Instr, FreeRegisters>,
+    pub block_end_free_regs: DenseMap<Block, FreeRegisters>,
 }
 
 impl RegallocOutput {
@@ -377,7 +446,7 @@ pub fn perform_coloring(
                 .get_subsequent_use_set(instr)
                 .change_context(ColoringError::LivenessAnalysisError)?;
 
-            alloc_file.set_instr_free_register(instr);
+            alloc_file.set_instr_free_registers(instr);
             for instr_use in instr_uses {
                 if !subsequent_uses.contains(&instr_use) {
                     alloc_file.free(instr_use)?;
@@ -388,6 +457,8 @@ pub fn perform_coloring(
                 alloc_file.allocate(def)?;
             }
         }
+
+        alloc_file.set_block_end_free_registers(block);
 
         let dom_children = dom
             .tree

@@ -1,6 +1,7 @@
 use error_stack::{report, ResultExt};
 use fyrc_machinst::{
-    block::MachBlock,
+    block::{MachBlock, MachBlockData},
+    constant::{MachConst, MachConstData},
     func::{MachFunc, MachFuncData},
     instr::ThumbMachinstData,
 };
@@ -37,6 +38,14 @@ impl<'a> MachFuncBuilder<'a> {
     #[inline]
     pub fn get_func_data_mut(&mut self) -> &mut MachFuncData {
         &mut self.func_data
+    }
+
+    pub fn define_const(&mut self, constant: MachConstData) -> MachConst {
+        self.func_data.consts.insert(constant)
+    }
+
+    pub fn add_block(&mut self) -> MachBlock {
+        self.func_data.blocks.insert(MachBlockData::new())
     }
 
     pub fn add_instr<I>(&mut self, instr: I) -> BuilderResult<()>

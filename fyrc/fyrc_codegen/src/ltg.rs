@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use fyrc_machinst::types::Register;
 use fyrc_regalloc::coloring::SpillSlot;
 
@@ -38,8 +38,8 @@ impl fmt::Display for Location {
 
 #[derive(Debug, Clone)]
 pub struct Transfer {
-    from: Location,
-    to: Location,
+    pub(crate) from: Location,
+    pub(crate) to: Location,
 }
 
 impl fmt::Display for Transfer {
@@ -51,16 +51,12 @@ impl fmt::Display for Transfer {
 /// Data Structure to Construct, Represent and Solve a Location Transfer Graph
 #[derive(Debug)]
 pub struct LocationTransferGraph {
-    src: Vec<Location>,
-    dest: Vec<Location>,
     preds: FxHashMap<Location, Location>,
 }
 
 impl LocationTransferGraph {
     pub fn new() -> Self {
         Self {
-            src: Vec::new(),
-            dest: Vec::new(),
             preds: FxHashMap::default(),
         }
     }
@@ -88,10 +84,26 @@ impl LocationTransferGraph {
             return pred == from;
         }
 
-        self.src.push(from);
-        self.dest.push(to);
         self.preds.insert(to, from);
         true
+    }
+
+    pub fn has_mem2mem(&self) -> bool {
+        for (to, from) in self.preds.iter() {
+            if matches!((to, from), (Location::Mem(_), Location::Mem(_))) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn requires_scratch(&self) -> bool {
+        for to in self.preds.keys() {
+            if matches!(to, Location::Scratch) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Constructs a GraphViz DiGraph of the LTG in the DOT DSL.
@@ -104,7 +116,19 @@ impl LocationTransferGraph {
         format!("digraph ltg {{\n{}\n}}\n", lines.join("\n"))
     }
 
-    pub fn solve(mut self) -> Vec<Transfer> {
+    pub fn get_clobbered_registers(&self) -> FxHashSet<Register> {
+        let mut result = FxHashSet::default();
+
+        for &dest in self.preds.keys() {
+            if let Location::Reg(r) = dest {
+                result.insert(r);
+            }
+        }
+
+        result
+    }
+
+    pub fn solve(self) -> Vec<Transfer> {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum EdgeStatus {
             ToMove,
@@ -120,10 +144,18 @@ impl LocationTransferGraph {
         }
         use EdgeProcessingStatus::*;
 
-        let mut transfers = Vec::new();
-        let mut status = vec![ToMove; self.src.len()];
+        let mut src = Vec::with_capacity(self.preds.len());
+        let mut dest = Vec::with_capacity(self.preds.len());
 
-        for iter_idx in 0..self.src.len() {
+        for (s, d) in self.preds.into_iter() {
+            src.push(s);
+            dest.push(d);
+        }
+
+        let mut transfers = Vec::new();
+        let mut status = vec![ToMove; src.len()];
+
+        for iter_idx in 0..src.len() {
             if !matches!(status[iter_idx], ToMove) {
                 continue;
             }
@@ -132,8 +164,8 @@ impl LocationTransferGraph {
             while let Some((i, my_status)) = stack.pop() {
                 if my_status == Processed {
                     transfers.push(Transfer {
-                        from: self.src[i],
-                        to: self.dest[i],
+                        from: src[i],
+                        to: dest[i],
                     });
                     status[i] = Moved;
 
@@ -143,8 +175,8 @@ impl LocationTransferGraph {
                 status[i] = BeingMoved;
                 stack.push((i, Processed));
 
-                for j in 0..self.src.len() {
-                    if self.dest[i] != self.src[j] {
+                for j in 0..src.len() {
+                    if dest[i] != src[j] {
                         continue;
                     }
 
@@ -153,9 +185,9 @@ impl LocationTransferGraph {
                     } else if status[j] == BeingMoved {
                         transfers.push(Transfer {
                             to: Location::Scratch,
-                            from: self.src[j],
+                            from: src[j],
                         });
-                        self.src[j] = Location::Scratch;
+                        src[j] = Location::Scratch;
                     }
                 }
             }

@@ -1,7 +1,16 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Register(pub u8);
 
 impl Register {
+    pub const R0: Self = Self(0);
+    pub const R1: Self = Self(1);
+    pub const R2: Self = Self(2);
+    pub const R3: Self = Self(3);
+    pub const R4: Self = Self(4);
+    pub const R5: Self = Self(5);
+    pub const R6: Self = Self(6);
+    pub const R7: Self = Self(7);
+
     pub fn thumb(&self) -> u16 {
         u16::from(self.0) & 0b111
     }
@@ -14,6 +23,10 @@ impl Register {
     #[inline]
     pub fn is_hi(&self) -> bool {
         self.0 >= 8
+    }
+
+    pub fn reg_id(&self) -> u8 {
+        self.0
     }
 }
 

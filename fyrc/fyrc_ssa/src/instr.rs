@@ -7,7 +7,7 @@ use crate::{
     block::Block,
     constant::{Const, ConstKind},
     function::Function,
-    value::{GlobalValue, GlobalValueData, Value, ValueType},
+    value::{GlobalValue, Value, ValueType},
 };
 
 use fyrc_utils::EntityId;
@@ -71,39 +71,6 @@ pub trait SsaInstr {
     fn get_uses(&self) -> Vec<Value>;
 }
 
-macro_rules! instr_3 {
-    (#[$doc:meta] $name:ident, $name_str:literal) => {
-        #[$doc]
-        #[derive(Debug, Clone)]
-        pub struct $name {
-            pub rs: Value,
-            pub rn: Value,
-        }
-
-        impl SsaInstr for $name {
-            fn rewrite_value(&mut self, from: Value, to: Value) {
-                self.rs.rewrite(from, to);
-                self.rn.rewrite(from, to);
-            }
-
-            fn get_name(&self) -> String {
-                $name_str.to_string()
-            }
-
-            fn get_args(&self) -> InstrArgs {
-                InstrArgs::from_iter([
-                    ArgKind::NamedValue("rs".to_string(), self.rs),
-                    ArgKind::NamedValue("rn".to_string(), self.rn),
-                ])
-            }
-
-            fn get_uses(&self) -> Vec<Value> {
-                vec![self.rs, self.rn]
-            }
-        }
-    };
-}
-
 macro_rules! impl_from_instr_data {
     ($($name:ident),+) => {
         $(
@@ -116,47 +83,106 @@ macro_rules! impl_from_instr_data {
     };
 }
 
-instr_3!(
-    #[doc = "Add Rd to Rs and store in Rn"]
+#[derive(Debug, Clone, Copy)]
+pub enum AluBinaryOpKind {
     Add,
-    "add"
-);
-
-instr_3!(
-    #[doc = "Add with carry"]
-    Adc,
-    "adc"
-);
-
-instr_3!(
-    #[doc = "Subtract Rd from Rs and store in Rn"]
     Sub,
-    "sub"
-);
-
-instr_3!(
-    #[doc = "Multiply Rd with Rs and store in Rn"]
     Mul,
-    "mul"
-);
-
-instr_3!(
-    #[doc = "Logical shift left Rd by Rs and store in Rn"]
     Lsl,
-    "lsl"
-);
-
-instr_3!(
-    #[doc = "Logical shift right Rd by Rs and store in Rn"]
     Lsr,
-    "lsr"
-);
+    Asr,
+    And,
+    Orr,
+    Xor,
+}
 
-instr_3!(
-    #[doc = "Arithmetic shift right Rd by Rs and store in Rn"]
-    Asl,
-    "asl"
-);
+impl ToString for AluBinaryOpKind {
+    fn to_string(&self) -> String {
+        let op = match self {
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::Mul => "mul",
+            Self::Lsl => "lsl",
+            Self::Lsr => "lsr",
+            Self::Asr => "asr",
+            Self::And => "and",
+            Self::Orr => "orr",
+            Self::Xor => "xor",
+        };
+
+        format!("alu.{op}")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AluBinaryOp {
+    pub op: AluBinaryOpKind,
+    pub rs: Value,
+    pub rn: Value,
+}
+
+impl SsaInstr for AluBinaryOp {
+    fn rewrite_value(&mut self, from: Value, to: Value) {
+        self.rs.rewrite(from, to);
+        self.rn.rewrite(from, to);
+    }
+
+    fn get_name(&self) -> String {
+        self.op.to_string()
+    }
+
+    fn get_args(&self) -> InstrArgs {
+        InstrArgs::from_iter([
+            ArgKind::NamedValue("rs".to_string(), self.rs),
+            ArgKind::NamedValue("rn".to_string(), self.rn),
+        ])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.rs, self.rn]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AluUnaryOpKind {
+    Neg,
+    Not,
+}
+
+impl ToString for AluUnaryOpKind {
+    fn to_string(&self) -> String {
+        let op = match self {
+            Self::Neg => "neg",
+            Self::Not => "not",
+        };
+
+        format!("alu.{op}")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AluUnaryOp {
+    pub op: AluUnaryOpKind,
+    pub rs: Value,
+}
+
+impl SsaInstr for AluUnaryOp {
+    fn rewrite_value(&mut self, from: Value, to: Value) {
+        self.rs.rewrite(from, to);
+    }
+
+    fn get_name(&self) -> String {
+        self.op.to_string()
+    }
+
+    fn get_args(&self) -> InstrArgs {
+        InstrArgs::from_iter([ArgKind::NamedValue("rs".to_string(), self.rs)])
+    }
+
+    fn get_uses(&self) -> Vec<Value> {
+        vec![self.rs]
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Call {
@@ -291,7 +317,7 @@ pub struct LoadGlobal {
 }
 
 impl SsaInstr for LoadGlobal {
-    fn rewrite_value(&mut self, from: Value, to: Value) {}
+    fn rewrite_value(&mut self, _: Value, _: Value) {}
 
     fn get_name(&self) -> String {
         "load_const".to_string()
@@ -345,59 +371,59 @@ impl SsaInstr for Ret {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Cond {
-    Equal,
-    NotEqual,
-    GreaterThan,
-    LessThan,
-    GreaterThanEq,
-    LessThanEq,
+    Eq,
+    Neq,
+    Sgt,
+    Sgte,
+    Slt,
+    Slte,
+    Ugt,
+    Ugte,
+    Ult,
+    Ulte,
 }
 
 impl fmt::Display for Cond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::Equal => "eq",
-            Self::NotEqual => "neq",
-            Self::GreaterThan => "gt",
-            Self::LessThan => "lt",
-            Self::GreaterThanEq => "gte",
-            Self::LessThanEq => "lte",
+            Self::Eq => "eq",
+            Self::Neq => "neq",
+            Self::Sgt => "sgt",
+            Self::Sgte => "sgte",
+            Self::Slt => "slt",
+            Self::Slte => "slte",
+            Self::Ugt => "ugt",
+            Self::Ugte => "ugte",
+            Self::Ult => "ult",
+            Self::Ulte => "ulte",
         })
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Cmp {
+pub struct ICmp {
     pub rs: Value,
     pub rn: Value,
-    pub result_cond: Option<Cond>,
+    pub cond: Cond,
 }
 
-impl SsaInstr for Cmp {
+impl SsaInstr for ICmp {
     fn rewrite_value(&mut self, from: Value, to: Value) {
         self.rs.rewrite(from, to);
         self.rn.rewrite(from, to);
     }
 
     fn has_result(&self) -> bool {
-        self.result_cond.is_some()
+        true
     }
 
     fn get_name(&self) -> String {
-        if self.result_cond.is_some() {
-            "cmpb"
-        } else {
-            "cmps"
-        }
-        .to_string()
+        "icmp".to_string()
     }
 
     fn get_args(&self) -> InstrArgs {
-        let mut args = Vec::<ArgKind>::new();
-        if let Some(ref cond) = self.result_cond {
-            args.push(ArgKind::Str(cond.to_string()));
-        }
-
+        let mut args = Vec::<ArgKind>::with_capacity(3);
+        args.push(ArgKind::Str(self.cond.to_string()));
         args.push(ArgKind::Value(self.rs));
         args.push(ArgKind::Value(self.rn));
 
@@ -410,21 +436,16 @@ impl SsaInstr for Cmp {
 }
 
 #[derive(Debug, Clone)]
-pub enum BranchKind {
-    Status(Cond),
-    Zero(Value),
-    NotZero(Value),
-}
-
-#[derive(Debug, Clone)]
 pub struct Branch {
-    pub kind: BranchKind,
+    pub value: Value,
     pub then_block: Block,
     pub else_block: Block,
 }
 
 impl SsaInstr for Branch {
-    fn rewrite_value(&mut self, _: Value, _: Value) {}
+    fn rewrite_value(&mut self, from: Value, to: Value) {
+        self.value.rewrite(from, to);
+    }
 
     fn has_result(&self) -> bool {
         false
@@ -439,32 +460,18 @@ impl SsaInstr for Branch {
     }
 
     fn get_name(&self) -> String {
-        match &self.kind {
-            BranchKind::Status(_) => "brs",
-            BranchKind::Zero(_) => "brz",
-            BranchKind::NotZero(_) => "brnz",
-        }
-        .to_string()
+        "br".to_string()
     }
 
     fn get_args(&self) -> InstrArgs {
         InstrArgs::from_iter([
-            match self.kind {
-                BranchKind::Status(cond) => ArgKind::Str(cond.to_string()),
-                BranchKind::Zero(val) => ArgKind::Value(val),
-                BranchKind::NotZero(val) => ArgKind::Value(val),
-            },
             ArgKind::NamedBlock("then".to_string(), self.then_block),
             ArgKind::NamedBlock("else".to_string(), self.else_block),
         ])
     }
 
     fn get_uses(&self) -> Vec<Value> {
-        match self.kind {
-            BranchKind::Status(_) => vec![],
-            BranchKind::Zero(v) => vec![v],
-            BranchKind::NotZero(v) => vec![v],
-        }
+        vec![self.value]
     }
 }
 
@@ -531,28 +538,6 @@ impl SsaInstr for CopyV {
         vec![self.val]
     }
 }
-
-impl_from_instr_data!(
-    Add,
-    Adc,
-    Sub,
-    Mul,
-    Lsl,
-    Lsr,
-    Asl,
-    Call,
-    Load,
-    Store,
-    LoadConst,
-    LoadGlobal,
-    Ret,
-    Cmp,
-    Branch,
-    Jump,
-    CopyV,
-    SpillValue,
-    ReloadValue
-);
 
 #[derive(Debug, Clone)]
 pub struct SpillValue {
@@ -637,20 +622,15 @@ impl EntityId for Instr {
 
 #[derive(Debug, Clone)]
 pub enum InstrData {
-    Add(Add),
-    Adc(Adc),
-    Sub(Sub),
-    Mul(Mul),
-    Lsl(Lsl),
-    Lsr(Lsr),
-    Asl(Asl),
+    AluBinaryOp(AluBinaryOp),
+    AluUnaryOp(AluUnaryOp),
     Call(Call),
     Load(Load),
     Store(Store),
     LoadConst(LoadConst),
     LoadGlobal(LoadGlobal),
     Ret(Ret),
-    Cmp(Cmp),
+    ICmp(ICmp),
     Branch(Branch),
     Jump(Jump),
     CopyV(CopyV),
@@ -658,25 +638,37 @@ pub enum InstrData {
     ReloadValue(ReloadValue),
 }
 
+impl_from_instr_data! {
+    AluBinaryOp,
+    AluUnaryOp,
+    Call,
+    Load,
+    Store,
+    LoadConst,
+    LoadGlobal,
+    Ret,
+    ICmp,
+    Branch,
+    Jump,
+    CopyV,
+    SpillValue,
+    ReloadValue
+}
+
 impl Deref for InstrData {
     type Target = dyn SsaInstr;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Add(add) => add,
-            Self::Adc(adc) => adc,
-            Self::Sub(sub) => sub,
-            Self::Mul(mul) => mul,
-            Self::Lsl(lsl) => lsl,
-            Self::Lsr(lsr) => lsr,
-            Self::Asl(asl) => asl,
+            Self::AluBinaryOp(abo) => abo,
+            Self::AluUnaryOp(auo) => auo,
             Self::Call(call) => call,
             Self::Load(load) => load,
             Self::Store(store) => store,
             Self::LoadConst(lc) => lc,
             Self::LoadGlobal(lg) => lg,
             Self::Ret(ret) => ret,
-            Self::Cmp(cmp) => cmp,
+            Self::ICmp(cmp) => cmp,
             Self::Branch(branch) => branch,
             Self::Jump(jump) => jump,
             Self::CopyV(copy_v) => copy_v,
@@ -689,36 +681,20 @@ impl Deref for InstrData {
 impl DerefMut for InstrData {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Self::Add(add) => add,
-            Self::Adc(adc) => adc,
-            Self::Sub(sub) => sub,
-            Self::Mul(mul) => mul,
-            Self::Lsl(lsl) => lsl,
-            Self::Lsr(lsr) => lsr,
-            Self::Asl(asl) => asl,
+            Self::AluBinaryOp(abo) => abo,
+            Self::AluUnaryOp(auo) => auo,
             Self::Call(call) => call,
             Self::Load(load) => load,
             Self::Store(store) => store,
             Self::LoadConst(lc) => lc,
             Self::LoadGlobal(lg) => lg,
             Self::Ret(ret) => ret,
-            Self::Cmp(cmp) => cmp,
+            Self::ICmp(cmp) => cmp,
             Self::Branch(branch) => branch,
             Self::Jump(jump) => jump,
             Self::CopyV(copy_v) => copy_v,
             Self::SpillValue(spill_v) => spill_v,
             Self::ReloadValue(reload_v) => reload_v,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn check_size() {
-        let size = std::mem::size_of::<InstrData>();
-        println!("Size is {size}");
     }
 }

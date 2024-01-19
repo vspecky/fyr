@@ -103,11 +103,11 @@ macro_rules! __dsl_stmt {
     ($b:ident,$v:ident $(,$lh:ident,$lo:ident)? if $lhs:tt $rhs:tt $thenb:tt $elseb:tt) => {{
         let lval = $crate::__dsl_expr!($b,$v $lhs);
         let rval = $crate::__dsl_expr!($b,$v $rhs);
-        $b.ins().cmps(lval, rval).expect("cmps ins");
         let thenb = $b.make_block().expect("block make");
         let elseb = $b.make_block().expect("block make");
         let contb = $b.make_block().expect("block make");
-        $b.ins().brs(instr::Cond::Equal, thenb, elseb).expect("brs ins");
+        let condres = $b.ins().icmp(lval, rval, instr::Cond::Eq).expect("cmps ins");
+        $b.ins().br(condres, thenb, elseb).expect("brs ins");
 
         $b.seal_block(thenb).expect("block seal");
         $b.seal_block(elseb).expect("block seal");
@@ -148,8 +148,8 @@ macro_rules! __dsl_stmt {
 
         let lval = $crate::__dsl_expr!($b,$v $lhs);
         let rval = $crate::__dsl_expr!($b,$v $rhs);
-        $b.ins().cmps(lval, rval).expect("cmps ins");
-        $b.ins().brs(instr::Cond::Equal, loopb, contb).expect("brs ins");
+        let condres = $b.ins().icmp(lval, rval, instr::Cond::Eq).expect("cmps ins");
+        $b.ins().br(condres, loopb, contb).expect("brs ins");
         $b.switch_to_block(loopb).expect("block switch");
         $b.seal_block(loopb).expect("block seal");
 

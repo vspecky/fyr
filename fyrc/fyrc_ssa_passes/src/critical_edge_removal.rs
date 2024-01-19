@@ -148,7 +148,7 @@ mod tests {
         let next_block = b.make_block().expect("next_block make");
 
         b.ins()
-            .brz(v0, then_block, next_block)
+            .br(v0, then_block, next_block)
             .expect("jmp then, next");
 
         b.seal_block(then_block).expect("seal then_block");

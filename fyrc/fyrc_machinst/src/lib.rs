@@ -1,5 +1,6 @@
 pub mod block;
 pub mod constant;
+pub mod error;
 pub mod func;
 pub mod hop;
 pub mod instr;

@@ -1,5 +1,4 @@
 use error_stack::{report, ResultExt};
-use fxhash::FxHashSet;
 use fyrc_machinst::{
     block::MachBlock,
     constant::{MachConst, MachConstData},
@@ -26,7 +25,7 @@ use crate::{
 };
 
 const SCRATCH_HI: Register = Register(0);
-const WORD_SIZE: u16 = 4;
+const WORD_SIZE: u8 = 4;
 
 pub struct CodegenCtx<'a> {
     builder: MachFuncBuilder<'a>,
@@ -118,7 +117,7 @@ impl<'a> CodegenCtx<'a> {
         }
 
         if distance > 0 {
-            self.emit_instr(tasm!(ADD SP, #distance as i16 * 4))?;
+            self.emit_instr(tasm!(ADD SP, #distance as i16 * i16::from(WORD_SIZE)))?;
         }
         Ok(())
     }
@@ -147,7 +146,7 @@ impl<'a> CodegenCtx<'a> {
             spill_location_distance -= Self::MAX_SP_OFFSET_WORD_RANGE;
         }
 
-        self.emit_instr(tasm!(LDR %reg, SP, #spill_location_distance * 4))?;
+        self.emit_instr(tasm!(LDR %reg, SP, #spill_location_distance * WORD_SIZE as u16))?;
 
         for _ in 0..sp_forwards {
             self.emit_sp_max_backward()?;
@@ -166,7 +165,7 @@ impl<'a> CodegenCtx<'a> {
             store_location_distance -= Self::MAX_SP_OFFSET_WORD_RANGE;
         }
 
-        self.emit_instr(tasm!(STR %reg, SP, #store_location_distance * 4))?;
+        self.emit_instr(tasm!(STR %reg, SP, #store_location_distance * WORD_SIZE as u16))?;
 
         for _ in 0..sp_forwards {
             self.emit_sp_max_backward()?;
@@ -338,7 +337,7 @@ impl<'a> CodegenCtx<'a> {
 
         self.emit_instr(tasm!(PUSH caller_saved_registers.clone()))?;
         let stack_args_offset = data.args.len().saturating_sub(ABI_ARGS_IN_REGS);
-        self.emit_instr(tasm!(ADD SP, #-(stack_args_offset as i16 * 4)))?;
+        self.emit_instr(tasm!(ADD SP, #-(stack_args_offset as i16 * WORD_SIZE as i16)))?;
         // stack args size + caller saved registers
         let slot_offset = stack_args_offset + caller_saved_registers.len();
         let mut ltg = LocationTransferGraph::new();
@@ -400,7 +399,7 @@ impl<'a> CodegenCtx<'a> {
 
         self.emit_instr(tasm!(BL MachFunc::with_id(data.func.get_id())))?;
         if stack_args_offset > 0 {
-            self.emit_instr(tasm!(ADD SP, #stack_args_offset as i16 * 4))?;
+            self.emit_instr(tasm!(ADD SP, #stack_args_offset as i16 * WORD_SIZE as i16))?;
         }
         self.emit_mov(rd, Register::R0)?;
         self.emit_instr(tasm!(POP caller_saved_registers))?;
@@ -547,7 +546,7 @@ impl<'a> CodegenCtx<'a> {
             spill_location_distance -= Self::MAX_SP_OFFSET_WORD_RANGE;
         }
 
-        self.emit_instr(tasm!(STR %rs, SP, #spill_location_distance * 4))?;
+        self.emit_instr(tasm!(STR %rs, SP, #spill_location_distance * WORD_SIZE as u16))?;
 
         for _ in 0..sp_forwards {
             self.emit_sp_max_backward()?;

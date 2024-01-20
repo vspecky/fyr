@@ -1,14 +1,13 @@
 //! Helper functions for register spilling
 
 use error_stack::{report, ResultExt};
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashSet;
 use fyrc_ssa::{
     block::Block,
     function::FunctionData,
     instr,
     value::{self, Value},
 };
-use fyrc_ssa_passes::{GlobalNextUse, LivenessAnalysis, LoopNestingForest};
 
 use crate::spilling::{SpillError, SpillProcessCtx, SpillResult};
 

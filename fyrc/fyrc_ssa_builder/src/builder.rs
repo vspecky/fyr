@@ -6,7 +6,7 @@ use fyrc_ssa::{
     function::{Function, FunctionData},
     instr::{self, InstrData},
     phi::{Phi, PhiData},
-    value::{GlobalValue, GlobalValueData, Value, ValueData, ValueKind, ValueType},
+    value::{GlobalValue, Value, ValueData, ValueKind, ValueType},
     variable::{Variable, VariableData},
 };
 use fyrc_utils::{BoolExt, DenseMap};

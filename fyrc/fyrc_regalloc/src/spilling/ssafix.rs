@@ -9,7 +9,7 @@ use fyrc_ssa::{
     Block,
 };
 use fyrc_ssa_passes::{
-    def_use::{DefUse, DefUseType},
+    def_use::DefUseType,
     dominator_tree::{DominatorTree, Level},
 };
 
@@ -90,7 +90,6 @@ mod idomf {
         visited: bool,
         alpha: bool,
         in_phi: bool,
-        level: Level,
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -200,16 +199,11 @@ mod idomf {
         let mut piggy_bank = PiggyBank::new(Level::with_id(dom.level_blocks.len() - 1));
         let mut node_data: DenseMap<Block, NodeData> = DenseMap::with_capacity(func.blocks.len());
 
-        for block in func.blocks.keys() {
+        for _ in 0..func.blocks.len() {
             node_data.insert(NodeData {
                 visited: false,
                 alpha: false,
                 in_phi: false,
-                level: dom
-                    .block_levels
-                    .get(block)
-                    .copied()
-                    .ok_or_else(|| report!(SpillError::DominatorLevelNotFound))?,
             });
         }
 

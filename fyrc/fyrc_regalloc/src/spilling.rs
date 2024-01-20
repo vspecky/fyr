@@ -74,10 +74,6 @@ struct ForwardDistance {
 struct ForwardDistanceMap(FxHashMap<Value, ForwardDistance>);
 
 impl ForwardDistanceMap {
-    fn new() -> Self {
-        Self(FxHashMap::default())
-    }
-
     fn insert(&mut self, val: Value, next_use_distance: Distance, distance_from_start: Distance) {
         self.0.insert(
             val,
@@ -772,7 +768,7 @@ pub mod test_utils {
                 )>($func);
 
             $(let $func_print = $func.viz().expect("func print");)?
-            let mut $ctx = $crate::spilling::SpillProcessCtx {
+            let $ctx = $crate::spilling::SpillProcessCtx {
                 func: &mut $func,
                 gnu: &gnu,
                 liveness: &liveness,
@@ -797,24 +793,6 @@ pub mod test_utils {
 mod tests {
     use super::*;
     use fyrc_ssa_builder::ssa_dsl;
-
-    macro_rules! check_spills_reloads {
-        (@command($func:ident, $iter:ident) skip $num:literal $($($rest:tt)+)?) => {
-            let mut $iter = $iter.skip($num);
-            $(check_spills_reloads!(@command($func, $iter) $($rest)+);)?
-        };
-
-        (@block($func:ident) ($num:literal; $($tok:tt)+)) => {{
-            let block_data = $func
-                .get_block(Block::with_id($num))
-                .expect("check get block");
-
-            let mut instr_iter = block_data.iter_instr();
-
-            check_spills_reloads!(@command($func, instr_iter) $($tok)+);
-        }};
-        ($func:ident; $(($($tok:tt)+))+) => {};
-    }
 
     #[test]
     fn test_straight_line_spills() {

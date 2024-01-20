@@ -102,7 +102,7 @@ impl RegisterFile {
     }
 
     fn allocate(&mut self) -> ColoringResult<Register> {
-        if let Some(free_reg) = self.free_regs.pop_last() {
+        if let Some(free_reg) = self.free_regs.pop_first() {
             self.allocated_regs.insert(free_reg);
             Ok(free_reg)
         } else {

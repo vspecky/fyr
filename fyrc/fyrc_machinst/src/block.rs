@@ -1,3 +1,5 @@
+use std::fmt;
+
 use fyrc_utils::EntityId;
 
 use crate::instr::Machinst;
@@ -18,6 +20,12 @@ impl EntityId for MachBlock {
     #[inline]
     fn with_id(idx: usize) -> Self {
         Self(idx)
+    }
+}
+
+impl fmt::Display for MachBlock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "block{}", self.0)
     }
 }
 

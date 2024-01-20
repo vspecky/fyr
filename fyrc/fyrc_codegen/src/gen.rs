@@ -37,23 +37,10 @@ pub struct CodegenCtx<'a> {
 impl<'a> CodegenCtx<'a> {
     const MAX_SP_OFFSET_WORD_RANGE: u16 = 127;
     const MAX_SP_RELATIVE_READ_WORD_RANGE: u16 = 255;
-    const ALL_REGS: [Register; 8] = [
-        Register(0),
-        Register(1),
-        Register(2),
-        Register(3),
-        Register(4),
-        Register(5),
-        Register(6),
-        Register(7),
-    ];
     const CALLER_SAVED_REGS: [Register; 4] =
         [Register::R0, Register::R1, Register::R2, Register::R3];
     const CALLEE_SAVED_REGS: [Register; 4] =
         [Register::R4, Register::R5, Register::R6, Register::R7];
-
-    const TEMP_SCRATCH: Register = Register::R6;
-    const MEM2MEM_SCRATCH: Register = Register::R7;
 
     pub fn new(
         builder: MachFuncBuilder<'a>,

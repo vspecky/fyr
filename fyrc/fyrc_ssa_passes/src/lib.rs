@@ -113,6 +113,10 @@ impl PassManager {
     pub fn get_func(&self) -> Ref<FunctionData> {
         self.function_data.borrow()
     }
+
+    pub fn get_func_mut(&self) -> RefMut<FunctionData> {
+        self.function_data.borrow_mut()
+    }
 }
 
 pub struct PassDepTracker<'a> {

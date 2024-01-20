@@ -891,7 +891,7 @@ macro_rules! __tasm_internal {
     // LR := temp | 1
     (BL $label:expr) => {
         BranchWithLink {
-            offset: CallDest::from($label),
+            dest: CallDest::from($label),
         }
     };
 }

@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Register(pub u8);
 
@@ -30,6 +32,12 @@ impl Register {
     }
 }
 
+impl fmt::Display for Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "r{}", self.0)
+    }
+}
+
 pub trait MachineCode {
     type Output;
 
@@ -57,6 +65,16 @@ macro_rules! make_thumb_imm {
 
                 pub fn bits(&self) -> u16 {
                     (self.0 $(>> $shift)?) & (2u16.pow($bits) - 1)
+                }
+
+                pub fn mag(&self) -> u16 {
+                    self.0
+                }
+            }
+
+            impl std::fmt::Display for $name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "#{}", self.0)
                 }
             }
 
@@ -96,6 +114,16 @@ macro_rules! make_thumb_simm {
                     let casted = u16::from_ne_bytes(self.0.to_ne_bytes());
                     let rest_bits = (casted $(>> $shift)?) & ((0b1 << ($bits - 1)) - 1);
                     res | rest_bits
+                }
+
+                pub fn mag(&self) -> i16 {
+                    self.0
+                }
+            }
+
+            impl std::fmt::Display for $name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "#{}", self.0)
                 }
             }
 

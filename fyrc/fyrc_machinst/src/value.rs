@@ -1,3 +1,5 @@
+use std::fmt;
+
 use fyrc_utils::EntityId;
 
 #[derive(Debug, Clone, Copy)]
@@ -19,6 +21,12 @@ impl EntityId for MachGlobalValue {
     #[inline]
     fn with_id(idx: usize) -> Self {
         Self(idx)
+    }
+}
+
+impl fmt::Display for MachGlobalValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "global{}", self.0)
     }
 }
 

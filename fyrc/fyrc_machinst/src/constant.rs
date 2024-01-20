@@ -1,3 +1,5 @@
+use std::fmt;
+
 use fyrc_utils::EntityId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,6 +14,12 @@ impl EntityId for MachConst {
     #[inline]
     fn with_id(idx: usize) -> Self {
         Self(idx)
+    }
+}
+
+impl fmt::Display for MachConst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "const{}", self.0)
     }
 }
 

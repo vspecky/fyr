@@ -22,7 +22,7 @@ pub enum LivenessAnalysisError {
     SubsequentUseSetNotFound,
 }
 
-struct LivenessAnalysisBuilder<'a> {
+pub struct LivenessAnalysisBuilder<'a> {
     func: &'a FunctionData,
     dfs_tree: &'a crate::DfsTree,
     loop_forest: &'a crate::LoopNestingForest,
@@ -31,7 +31,7 @@ struct LivenessAnalysisBuilder<'a> {
 }
 
 impl<'a> LivenessAnalysisBuilder<'a> {
-    fn new(
+    pub fn new(
         func: &'a FunctionData,
         dfs_tree: &'a crate::DfsTree,
         loop_forest: &'a crate::LoopNestingForest,
@@ -221,7 +221,7 @@ impl<'a> LivenessAnalysisBuilder<'a> {
         Ok(subsequent_use_sets)
     }
 
-    fn build(mut self) -> PassResult<LivenessAnalysis, LivenessAnalysisError> {
+    pub fn build(mut self) -> PassResult<LivenessAnalysis, LivenessAnalysisError> {
         self.propagate_partial_liveness_info()?;
         self.propagate_loop_liveness_info()?;
         let subsequent_use_sets = self.build_subsequent_liveness_sets()?;

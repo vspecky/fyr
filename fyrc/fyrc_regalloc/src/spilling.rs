@@ -120,6 +120,37 @@ pub struct SpillProcessCtx<'a, 'b> {
     pub inserted_instrs: FxHashMap<Value, Vec<(Instr, Block)>>,
 }
 
+impl<'a, 'b> SpillProcessCtx<'a, 'b> {
+    pub fn new(
+        func: &'b mut FunctionData,
+        gnu: &'a GlobalNextUse,
+        liveness: &'a LivenessAnalysis,
+        loop_forest: &'a LoopNestingForest,
+        def_use: &'a DefUse,
+        dfs_tree: &'a DfsTree,
+        dom: &'a DominatorTree,
+        max_regs: usize,
+    ) -> Self {
+        Self {
+            func,
+            gnu,
+            liveness,
+            loop_forest,
+            def_use,
+            dfs_tree,
+            dom,
+            max_regs,
+            entry_reg_sets: FxHashMap::default(),
+            entry_spill_sets: FxHashMap::default(),
+            end_reg_sets: FxHashMap::default(),
+            end_spill_sets: FxHashMap::default(),
+            loop_use_sets: FxHashMap::default(),
+            loop_max_pressures: FxHashMap::default(),
+            inserted_instrs: FxHashMap::default(),
+        }
+    }
+}
+
 /// Takes the register set `reg_set`, a desired number of registers `max_regs` and evicts values from
 /// the register set that have the farthest next use distance until the number of values in the set
 /// equals `max_regs`. Does nothing if `len(reg_set) <= max_regs`.
@@ -709,19 +740,19 @@ fn connect_block_predecessors(ctx: &mut SpillProcessCtx<'_, '_>, block: Block) -
     Ok(())
 }
 
-pub fn perform_spilling(ctx: &mut SpillProcessCtx<'_, '_>) -> SpillResult<()> {
-    helpers::calculate_loop_use_sets(ctx)?;
-    helpers::calculate_max_loop_pressure(ctx)?;
+pub fn perform_spilling(mut ctx: SpillProcessCtx<'_, '_>) -> SpillResult<()> {
+    helpers::calculate_loop_use_sets(&mut ctx)?;
+    helpers::calculate_max_loop_pressure(&mut ctx)?;
 
     for &block in ctx.dfs_tree.postorder.iter().rev() {
-        init_block_reg_and_spill_sets(ctx, block)?;
+        init_block_reg_and_spill_sets(&mut ctx, block)?;
     }
 
     for block in ctx.func.blocks.keys() {
-        connect_block_predecessors(ctx, block)?;
+        connect_block_predecessors(&mut ctx, block)?;
     }
 
-    ssafix::fix_ssa(ctx)?;
+    ssafix::fix_ssa(&mut ctx)?;
 
     Ok(())
 }
@@ -799,7 +830,7 @@ mod tests {
 
         crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{}", func_print);
-        perform_spilling(&mut ctx).expect("spilling");
+        perform_spilling(ctx).expect("spilling");
         println!("{}", func.viz().expect("func print"));
     }
 
@@ -814,7 +845,7 @@ mod tests {
 
         crate::build_spilling_ctx!(func, ctx, 2, func_print);
         println!("{}", func_print);
-        perform_spilling(&mut ctx).expect("spilling");
+        perform_spilling(ctx).expect("spilling");
         println!("{}", func.viz().expect("func print"));
     }
 
@@ -834,7 +865,7 @@ mod tests {
 
         crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{}", func_print);
-        perform_spilling(&mut ctx).expect("spilling");
+        perform_spilling(ctx).expect("spilling");
         println!("{}", func.viz().expect("func print"));
     }
 
@@ -853,7 +884,7 @@ mod tests {
 
         crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{}", func_print);
-        perform_spilling(&mut ctx).expect("spilling");
+        perform_spilling(ctx).expect("spilling");
         println!("{}", func.viz().expect("func print"));
     }
 
@@ -873,7 +904,7 @@ mod tests {
 
         crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{func_print}");
-        perform_spilling(&mut ctx).expect("spilling");
+        perform_spilling(ctx).expect("spilling");
         println!("{}", func.viz().expect("func viz"));
     }
 
@@ -896,7 +927,7 @@ mod tests {
 
         crate::build_spilling_ctx!(func, ctx, 3, func_print);
         println!("{func_print}");
-        perform_spilling(&mut ctx).expect("spilling");
+        perform_spilling(ctx).expect("spilling");
         println!("{}", func.viz().expect("func viz"));
     }
 }

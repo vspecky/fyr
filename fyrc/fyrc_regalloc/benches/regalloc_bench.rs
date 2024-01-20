@@ -1,6 +1,33 @@
 #![allow(unused)]
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use fyrc_ssa::function::FunctionData;
 use fyrc_ssa_builder::ssa_dsl;
+use fyrc_ssa_passes::*;
+
+fn execute_passes(func: FunctionData) -> PassManager {
+    let mut pass_manager = PassManager::new(func);
+
+    macro_rules! ensure_passes {
+        ($($pass:ty),+) => {
+            $(
+                pass_manager
+                    .ensure_pass::<$pass>()
+                    .expect("pass failed");
+            )+
+        }
+    }
+
+    ensure_passes!(
+        GlobalNextUse,
+        DefUse,
+        DominatorTree,
+        LivenessAnalysis,
+        LoopNestingForest,
+        DfsTree
+    );
+
+    pass_manager
+}
 
 pub fn regalloc_benchmarks(c: &mut Criterion) {
     let func = ssa_dsl! {(
@@ -18,24 +45,42 @@ pub fn regalloc_benchmarks(c: &mut Criterion) {
 
     c.bench_function("Spilling", |b| {
         b.iter(|| {
-            let func = func.clone();
-            fyrc_regalloc::build_spilling_ctx!(func, ctx, 3);
-            fyrc_regalloc::spilling::perform_spilling(&mut ctx).expect("spilling");
+            let pass_manager = execute_passes(func.clone());
+            macro_rules! get_pass {
+                ($pass_name:ty) => {
+                    pass_manager
+                        .get_pass::<$pass_name>()
+                        .expect("pass not found")
+                };
+            }
+            let mut func = pass_manager.get_func_mut();
+            let gnu = get_pass!(GlobalNextUse);
+            let liveness = get_pass!(LivenessAnalysis);
+            let loop_forest = get_pass!(LoopNestingForest);
+            let def_use = get_pass!(DefUse);
+            let dfs_tree = get_pass!(DfsTree);
+            let dom = get_pass!(DominatorTree);
+            let max_regs = 3;
+
+            let ctx = fyrc_regalloc::spilling::SpillProcessCtx::new(
+                &mut func,
+                &gnu,
+                &liveness,
+                &loop_forest,
+                &def_use,
+                &dfs_tree,
+                &dom,
+                max_regs,
+            );
+
+            fyrc_regalloc::spilling::perform_spilling(ctx).expect("spilling");
         });
     });
 
     c.bench_function("Coloring", |b| {
         b.iter(|| {
-            let func = func.clone();
-            fyrc_regalloc::build_spilling_ctx!(func, ctx, 3);
-            fyrc_regalloc::spilling::perform_spilling(&mut ctx).expect("spilling");
-            let dominator_tree = ctx.dom;
-            std::mem::drop(ctx);
-            let (liveness, func_data) =
-                fyrc_ssa_passes::test_utils::get_pass::<fyrc_ssa_passes::LivenessAnalysis>(func);
-            let coloring =
-                fyrc_regalloc::coloring::perform_coloring(&func_data, dominator_tree, &liveness)
-                    .expect("coloring");
+            let pass_manager = execute_passes(func.clone());
+            fyrc_regalloc::perform_regalloc(&pass_manager).expect("regalloc");
         });
     });
 }

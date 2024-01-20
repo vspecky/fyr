@@ -1,3 +1,7 @@
+use std::fmt;
+
+use fyrc_utils::EntityId;
+
 use crate::{
     block::MachBlock,
     constant::MachConst,
@@ -68,6 +72,20 @@ pub enum BranchDestKind {
     Local,
 }
 
+impl fmt::Display for BranchDestKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "%{}",
+            match self {
+                Self::Block(b) => b.to_string(),
+                Self::Hop(h) => h.to_string(),
+                Self::Local => "%".to_string(),
+            }
+        )
+    }
+}
+
 impl From<MachBlock> for BranchDestKind {
     fn from(value: MachBlock) -> Self {
         Self::Block(value)
@@ -119,6 +137,20 @@ impl<T> BranchDest<T> {
     }
 }
 
+impl<T> fmt::Display for BranchDest<T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.kind.to_string())?;
+
+        if let Some(ref offset) = self.offset {
+            f.write_str(&format!(" ({offset})"))?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ValueRefKind {
     Const(MachConst),
@@ -137,10 +169,37 @@ impl From<MachGlobalValue> for ValueRefKind {
     }
 }
 
+impl fmt::Display for ValueRefKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "&{}",
+            match self {
+                Self::Const(c) => c.to_string(),
+                Self::Global(g) => g.to_string(),
+            }
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ValueRef<T> {
     pub kind: ValueRefKind,
     pub offset: Option<T>,
+}
+
+impl<T> fmt::Display for ValueRef<T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.kind.to_string())?;
+        if let Some(offset) = &self.offset {
+            f.write_str(&format!("({})", offset))?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<T> From<MachConst> for ValueRef<T> {
@@ -188,6 +247,20 @@ impl MovShRegOp {
     }
 }
 
+impl fmt::Display for MovShRegOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Lsl => "lsl",
+                Self::Lsr => "lsr",
+                Self::Asr => "asr",
+            }
+        )
+    }
+}
+
 /// Format 1: move shifted register
 ///
 /// These instructions move a shifted value between low registers.
@@ -214,6 +287,12 @@ impl MachineCode for MovShReg {
             (3: self.rs.thumb())
             (3: self.rd.thumb())
         )])
+    }
+}
+
+impl fmt::Display for MovShReg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}, {}, {}", self.op, self.rd, self.rs, self.offset5)
     }
 }
 
@@ -274,6 +353,19 @@ impl AddSubOp {
     }
 }
 
+impl fmt::Display for AddSubOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Add => "add",
+                Self::Sub => "sub",
+            }
+        )
+    }
+}
+
 /// Format 2: add/subtract
 ///
 /// These instructions allow the contents of a low register or a 3-bit immediate value to be added
@@ -306,6 +398,22 @@ impl MachineCode for AddSub {
     }
 }
 
+impl fmt::Display for AddSub {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {}, {}, {}",
+            self.op,
+            self.rd,
+            self.rs,
+            match self.imm {
+                AddSubImmFlag::ImmOp(op) => op.to_string(),
+                AddSubImmFlag::RegisterOp(reg) => reg.to_string(),
+            }
+        )
+    }
+}
+
 /// Opcodes for [`MovCmpAddSubImm`]
 #[derive(Debug, Clone)]
 pub enum MovCmpAddSubImmOp {
@@ -323,6 +431,21 @@ impl MovCmpAddSubImmOp {
             Self::Add => 0b10,
             Self::Sub => 0b11,
         }
+    }
+}
+
+impl fmt::Display for MovCmpAddSubImmOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Mov => "mov",
+                Self::Cmp => "cmp",
+                Self::Add => "add",
+                Self::Sub => "sub",
+            }
+        )
     }
 }
 
@@ -353,6 +476,12 @@ impl MachineCode for MovCmpAddSubImm {
     }
 }
 
+impl fmt::Display for MovCmpAddSubImm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}, {}, {}", self.op, self.rd, self.imm)
+    }
+}
+
 /// ALU operations opcodes
 #[derive(Debug, Clone)]
 pub enum AluOp {
@@ -372,6 +501,33 @@ pub enum AluOp {
     Mul,
     Bic,
     Mvn,
+}
+
+impl fmt::Display for AluOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::And => "and",
+                Self::Eor => "eor",
+                Self::Lsl => "lsl",
+                Self::Lsr => "lsr",
+                Self::Asr => "asr",
+                Self::Adc => "adc",
+                Self::Sbc => "sbc",
+                Self::Ror => "ror",
+                Self::Tst => "tst",
+                Self::Neg => "neg",
+                Self::Cmp => "cmp",
+                Self::Cmn => "cmn",
+                Self::Orr => "orr",
+                Self::Mul => "mul",
+                Self::Bic => "bic",
+                Self::Mvn => "mvn",
+            }
+        )
+    }
 }
 
 impl AluOp {
@@ -423,6 +579,12 @@ impl MachineCode for Alu {
     }
 }
 
+impl fmt::Display for Alu {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}, {}", self.op, self.rd, self.rs)
+    }
+}
+
 /// Opcodes for [`HiRegOpsBx`]
 #[derive(Debug, Clone)]
 pub enum HiRegOpsBxOp {
@@ -440,6 +602,21 @@ impl HiRegOpsBxOp {
             Self::Mov => 0b10,
             Self::Bx => 0b11,
         }
+    }
+}
+
+impl fmt::Display for HiRegOpsBxOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Add => "add",
+                Self::Cmp => "cmp",
+                Self::Mov => "mov",
+                Self::Bx => "bx",
+            }
+        )
     }
 }
 
@@ -477,6 +654,36 @@ impl MachineCode for HiRegOpsBx {
     }
 }
 
+impl fmt::Display for HiRegOpsBx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let rs = if self.h1 {
+            format!("h{}", self.rs_hs.thumb())
+        } else {
+            format!("r{}", self.rs_hs.thumb())
+        };
+
+        let rd = if self.h1 {
+            format!("h{}", self.rd_hd.thumb())
+        } else {
+            format!("r{}", self.rd_hd.thumb())
+        };
+
+        write!(
+            f,
+            "{}",
+            match self.op {
+                HiRegOpsBxOp::Bx => {
+                    format!("bx {rs}")
+                }
+
+                HiRegOpsBxOp::Add | HiRegOpsBxOp::Cmp | HiRegOpsBxOp::Mov => {
+                    format!("{} {}, {}", self.op, rd, rs)
+                }
+            }
+        )
+    }
+}
+
 /// Format 6: PC-relative load
 ///
 /// This instruction loads a word from an address specified as a 10-bit immediate offset from the PC.
@@ -507,6 +714,12 @@ impl MachineCode for PcRelativeLoad {
                 (8: imm.bits())
             )]
         })
+    }
+}
+
+impl fmt::Display for PcRelativeLoad {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ldr {}, pc, {}", self.rd, self.imm)
     }
 }
 
@@ -560,6 +773,23 @@ impl MachineCode for LdStrRoff {
     }
 }
 
+impl fmt::Display for LdStrRoff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self.ld_str_flag {
+            LdStrFlag::Load => "ldr",
+            LdStrFlag::Store => "str",
+        })?;
+
+        if matches!(self.byte_word_flag, LdStrRoffBWFlag::Byte) {
+            f.write_str("b")?;
+        }
+
+        f.write_str(&format!(" {}, {}, {}", self.rd, self.rb, self.ro))?;
+
+        Ok(())
+    }
+}
+
 /// Format 8: load/store sign-extended byte/halfword
 ///
 /// These instructions load optionally sign-extended bytes or halfwords, and store halfwords.
@@ -593,6 +823,24 @@ impl MachineCode for LdStSeBHw {
     }
 }
 
+impl fmt::Display for LdStSeBHw {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {}, {}, {}",
+            match (self.h_flag, self.s_flag) {
+                (false, false) => "strh",
+                (false, true) => "ldrh",
+                (true, false) => "ldsb",
+                (true, true) => "ldsh",
+            },
+            self.rd,
+            self.rb,
+            self.ro
+        )
+    }
+}
+
 /// Byte/Word flag and offset for [`LdStrImmOff`]
 #[derive(Debug, Clone)]
 pub enum LdStrImmOffBW {
@@ -613,6 +861,19 @@ impl LdStrImmOffBW {
             Self::Word(word) => word.bits(),
             Self::Byte(byte) => byte.bits(),
         }
+    }
+}
+
+impl fmt::Display for LdStrImmOffBW {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Word(w) => w.to_string(),
+                Self::Byte(b) => b.to_string(),
+            }
+        )
     }
 }
 
@@ -652,6 +913,23 @@ impl MachineCode for LdStrImmOff {
     }
 }
 
+impl fmt::Display for LdStrImmOff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self.ld_str_flag {
+            LdStrFlag::Load => "ldr",
+            LdStrFlag::Store => "str",
+        })?;
+
+        if matches!(self.byte_or_word, LdStrImmOffBW::Byte(_)) {
+            f.write_str("b")?;
+        }
+
+        f.write_str(&format!(" {}, {}, {}", self.rd, self.rb, self.byte_or_word))?;
+
+        Ok(())
+    }
+}
+
 /// Format 10: load/store halfword
 ///
 /// These instructions transfer halfword values between a Lo register and memory.
@@ -686,6 +964,22 @@ impl MachineCode for LdStrHw {
     }
 }
 
+impl fmt::Display for LdStrHw {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {}, {}, {}",
+            match self.ld_str_flag {
+                LdStrFlag::Load => "ldrh",
+                LdStrFlag::Store => "strh",
+            },
+            self.rd,
+            self.rb,
+            self.offset5
+        )
+    }
+}
+
 /// Format 11: SP-relative load/store
 ///
 /// The instructions in this group perform an SP-relative load or store.
@@ -716,6 +1010,21 @@ impl MachineCode for SpRelativeLdStr {
     }
 }
 
+impl fmt::Display for SpRelativeLdStr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {}, sp, {}",
+            match self.ld_str_flag {
+                LdStrFlag::Load => "ldr",
+                LdStrFlag::Store => "str",
+            },
+            self.rd,
+            self.imm
+        )
+    }
+}
+
 /// Load address source (PC/SP) for [`LdAddr`]
 #[derive(Debug, Clone)]
 pub enum LdAddrSource {
@@ -729,6 +1038,19 @@ impl LdAddrSource {
             Self::Pc => 0b0,
             Self::Sp => 0b1,
         }
+    }
+}
+
+impl fmt::Display for LdAddrSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Pc => "pc",
+                Self::Sp => "sp",
+            }
+        )
     }
 }
 
@@ -763,6 +1085,12 @@ impl MachineCode for LdAddr {
     }
 }
 
+impl fmt::Display for LdAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "add {}, {}, {}", self.rd, self.source, self.imm)
+    }
+}
+
 /// Sign flag for [`OffsetSP`]
 #[derive(Debug, Clone)]
 pub enum OffsetSPSignFlag {
@@ -776,6 +1104,19 @@ impl OffsetSPSignFlag {
             Self::Positive => 0b0,
             Self::Negative => 0b1,
         }
+    }
+}
+
+impl fmt::Display for OffsetSPSignFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Positive => "+",
+                Self::Negative => "-",
+            }
+        )
     }
 }
 
@@ -803,6 +1144,12 @@ impl MachineCode for OffsetSP {
             (1: self.sign_flag.bits())
             (7: self.imm.bits())
         )])
+    }
+}
+
+impl fmt::Display for OffsetSP {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "add sp, #{}{}", self.sign_flag, self.imm.mag())
     }
 }
 
@@ -842,6 +1189,33 @@ impl MachineCode for PushPopRegs {
     }
 }
 
+impl fmt::Display for PushPopRegs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut list = self
+            .rlist
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+
+        if self.pc_lr_bit {
+            list.push(match self.ld_str_flag {
+                LdStrFlag::Load => "pc".to_string(),
+                LdStrFlag::Store => "lr".to_string(),
+            });
+        }
+
+        write!(
+            f,
+            "{} {{{}}}",
+            match self.ld_str_flag {
+                LdStrFlag::Load => "pop",
+                LdStrFlag::Store => "push",
+            },
+            list.join(", ")
+        )
+    }
+}
+
 /// Format 15: multiple load/store
 ///
 /// These instructions allow multiple loading and storing of Lo registers.
@@ -870,6 +1244,27 @@ impl MachineCode for MultipleLdStr {
             (3: self.rb.thumb())
             (8: reg_list)
         )])
+    }
+}
+
+impl fmt::Display for MultipleLdStr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let list = self
+            .rlist
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+
+        write!(
+            f,
+            "{} {}!, {{{}}}",
+            match self.ld_str_flag {
+                LdStrFlag::Load => "ldmia",
+                LdStrFlag::Store => "stmia",
+            },
+            self.rb,
+            list.join(", ")
+        )
     }
 }
 
@@ -927,6 +1322,31 @@ impl CondBranchOp {
     }
 }
 
+impl fmt::Display for CondBranchOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Beq => "beq",
+                Self::Bne => "bne",
+                Self::Bcs => "bcs",
+                Self::Bcc => "bcc",
+                Self::Bmi => "bmi",
+                Self::Bpl => "bpl",
+                Self::Bvs => "bvs",
+                Self::Bvc => "bvc",
+                Self::Bhi => "bhi",
+                Self::Bls => "bls",
+                Self::Bge => "bge",
+                Self::Blt => "blt",
+                Self::Bgt => "bgt",
+                Self::Ble => "ble",
+            }
+        )
+    }
+}
+
 /// Format 16: conditional branch
 ///
 /// The instructions in this group all perform a conditional branch depending on the state
@@ -961,6 +1381,12 @@ impl MachineCode for CondBranch {
     }
 }
 
+impl fmt::Display for CondBranch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.cond, self.soffset8)
+    }
+}
+
 /// Format 17: software interrupt
 ///
 /// The SWI instruction performs a software interrupt. On taking the SWI, the processor switches
@@ -982,6 +1408,12 @@ impl MachineCode for Swi {
             (8: 0b11011111)
             (8: self.value8.bits())
         )])
+    }
+}
+
+impl fmt::Display for Swi {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "swi {}", self.value8)
     }
 }
 
@@ -1014,21 +1446,24 @@ impl MachineCode for UncondBranch {
     }
 }
 
+impl fmt::Display for UncondBranch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "b {}", self.soffset11)
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum CallDest {
-    Ref(MachFunc),
-    Offset(i32),
+pub struct CallDest {
+    func: MachFunc,
+    offset: Option<i32>,
 }
 
 impl From<MachFunc> for CallDest {
     fn from(value: MachFunc) -> Self {
-        Self::Ref(value)
-    }
-}
-
-impl From<i32> for CallDest {
-    fn from(value: i32) -> Self {
-        Self::Offset(value)
+        Self {
+            func: value,
+            offset: None,
+        }
     }
 }
 
@@ -1055,40 +1490,42 @@ impl From<i32> for CallDest {
 /// 1 word (4 bytes) ahead of the current instruction.
 #[derive(Debug, Clone)]
 pub struct BranchWithLink {
-    pub offset: CallDest,
+    pub dest: CallDest,
 }
 
 impl MachineCode for BranchWithLink {
     type Output = u16;
 
     fn to_machinst_bits(&self) -> Option<Vec<Self::Output>> {
-        match &self.offset {
-            CallDest::Offset(offset) => {
-                let mut hi = (*offset >> 11) & ((0b1 << 10) - 1);
-                if *offset < 0 {
-                    hi |= 0b1 << 10;
-                }
-
-                let lo = *offset & ((0b1 << 11) - 1);
-
-                Some(vec![
-                    repr16!(
-                        (5: 0b11111)
-                        (11: hi as u16)
-                    ),
-                    repr16!(
-                        (5: 0b11110)
-                        (11: lo as u16)
-                    ),
-                ])
+        self.dest.offset.map(|offset| {
+            let mut hi = (offset >> 11) & ((0b1 << 10) - 1);
+            if offset < 0 {
+                hi |= 0b1 << 10;
             }
 
-            CallDest::Ref(_) => None,
-        }
+            let lo = offset & ((0b1 << 11) - 1);
+
+            vec![
+                repr16!(
+                    (5: 0b11111)
+                    (11: hi as u16)
+                ),
+                repr16!(
+                    (5: 0b11110)
+                    (11: lo as u16)
+                ),
+            ]
+        })
     }
 
     fn len(&self) -> usize {
         2
+    }
+}
+
+impl fmt::Display for BranchWithLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "bl @@{}", self.dest.func.get_id())
     }
 }
 
@@ -1135,4 +1572,34 @@ pub enum ThumbMachinstData {
     Swi(Swi),
     UncondBranch(UncondBranch),
     BranchWithLink(BranchWithLink),
+}
+
+impl fmt::Display for ThumbMachinstData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::MovShReg(i) => i.to_string(),
+                Self::AddSub(i) => i.to_string(),
+                Self::MovCmpAddSubImm(i) => i.to_string(),
+                Self::Alu(i) => i.to_string(),
+                Self::HiRegOpsBx(i) => i.to_string(),
+                Self::PcRelativeLoad(i) => i.to_string(),
+                Self::LdStrRoff(i) => i.to_string(),
+                Self::LdStSeBHw(i) => i.to_string(),
+                Self::LdStrImmOff(i) => i.to_string(),
+                Self::LdStrHw(i) => i.to_string(),
+                Self::SpRelativeLdStr(i) => i.to_string(),
+                Self::LdAddr(i) => i.to_string(),
+                Self::OffsetSP(i) => i.to_string(),
+                Self::PushPopRegs(i) => i.to_string(),
+                Self::MultipleLdStr(i) => i.to_string(),
+                Self::CondBranch(i) => i.to_string(),
+                Self::Swi(i) => i.to_string(),
+                Self::UncondBranch(i) => i.to_string(),
+                Self::BranchWithLink(i) => i.to_string(),
+            }
+        )
+    }
 }

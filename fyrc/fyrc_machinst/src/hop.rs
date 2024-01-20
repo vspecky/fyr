@@ -1,3 +1,5 @@
+use std::fmt;
+
 use fyrc_utils::EntityId;
 
 use crate::block::MachBlock;
@@ -14,6 +16,12 @@ impl EntityId for MachHop {
     #[inline]
     fn with_id(idx: usize) -> Self {
         Self(idx)
+    }
+}
+
+impl fmt::Display for MachHop {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "hop{}", self.0)
     }
 }
 

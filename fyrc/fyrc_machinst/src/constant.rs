@@ -2,7 +2,7 @@ use std::fmt;
 
 use fyrc_utils::EntityId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MachConst(usize);
 
 impl EntityId for MachConst {

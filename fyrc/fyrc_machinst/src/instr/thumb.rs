@@ -1574,6 +1574,58 @@ pub enum ThumbMachinstData {
     BranchWithLink(BranchWithLink),
 }
 
+impl MachineCode for ThumbMachinstData {
+    type Output = u16;
+
+    fn to_machinst_bits(&self) -> Option<Vec<Self::Output>> {
+        match self {
+            Self::MovShReg(i) => i.to_machinst_bits(),
+            Self::AddSub(i) => i.to_machinst_bits(),
+            Self::MovCmpAddSubImm(i) => i.to_machinst_bits(),
+            Self::Alu(i) => i.to_machinst_bits(),
+            Self::HiRegOpsBx(i) => i.to_machinst_bits(),
+            Self::PcRelativeLoad(i) => i.to_machinst_bits(),
+            Self::LdStrRoff(i) => i.to_machinst_bits(),
+            Self::LdStSeBHw(i) => i.to_machinst_bits(),
+            Self::LdStrImmOff(i) => i.to_machinst_bits(),
+            Self::LdStrHw(i) => i.to_machinst_bits(),
+            Self::SpRelativeLdStr(i) => i.to_machinst_bits(),
+            Self::LdAddr(i) => i.to_machinst_bits(),
+            Self::OffsetSP(i) => i.to_machinst_bits(),
+            Self::PushPopRegs(i) => i.to_machinst_bits(),
+            Self::MultipleLdStr(i) => i.to_machinst_bits(),
+            Self::CondBranch(i) => i.to_machinst_bits(),
+            Self::Swi(i) => i.to_machinst_bits(),
+            Self::UncondBranch(i) => i.to_machinst_bits(),
+            Self::BranchWithLink(i) => i.to_machinst_bits(),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::MovShReg(i) => i.len(),
+            Self::AddSub(i) => i.len(),
+            Self::MovCmpAddSubImm(i) => i.len(),
+            Self::Alu(i) => i.len(),
+            Self::HiRegOpsBx(i) => i.len(),
+            Self::PcRelativeLoad(i) => i.len(),
+            Self::LdStrRoff(i) => i.len(),
+            Self::LdStSeBHw(i) => i.len(),
+            Self::LdStrImmOff(i) => i.len(),
+            Self::LdStrHw(i) => i.len(),
+            Self::SpRelativeLdStr(i) => i.len(),
+            Self::LdAddr(i) => i.len(),
+            Self::OffsetSP(i) => i.len(),
+            Self::PushPopRegs(i) => i.len(),
+            Self::MultipleLdStr(i) => i.len(),
+            Self::CondBranch(i) => i.len(),
+            Self::Swi(i) => i.len(),
+            Self::UncondBranch(i) => i.len(),
+            Self::BranchWithLink(i) => i.len(),
+        }
+    }
+}
+
 impl fmt::Display for ThumbMachinstData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

@@ -11,6 +11,7 @@ fyrc_machinst = { version = "0.1.0", path = "../fyrc_machinst" }
 fyrc_machinst_builder = { version = "0.1.0", path = "../fyrc_machinst_builder" }
 fyrc_regalloc = { version = "0.1.0", path = "../fyrc_regalloc" }
 fyrc_ssa = { version = "0.1.0", path = "../fyrc_ssa" }
+fyrc_ssa_passes = { version = "0.1.0", path = "../fyrc_ssa_passes" }
 fyrc_utils = { version = "0.1.0", path = "../fyrc_utils" }
 fxhash = "0.2.1"
 thiserror = "1.0.47"

@@ -4,7 +4,7 @@ use fyrc_utils::EntityId;
 
 use crate::block::MachBlock;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MachHop(usize);
 
 impl EntityId for MachHop {

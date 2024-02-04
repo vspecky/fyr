@@ -9,7 +9,7 @@ pub enum MachValueType {
     Int32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MachGlobalValue(usize);
 
 impl EntityId for MachGlobalValue {

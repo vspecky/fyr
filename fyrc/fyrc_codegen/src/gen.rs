@@ -675,8 +675,25 @@ impl<'a> CodegenCtx<'a> {
     }
 
     pub fn build(mut self) -> CodegenResult<()> {
-        for _ in 0..self.ssa_func.blocks.len() {
-            self.builder.add_block();
+        for ssa_block_data in self.ssa_func.blocks.values() {
+            let mach_block = self.builder.add_block();
+            let mach_block_data = self
+                .builder
+                .get_func_data_mut()
+                .get_block_mut(mach_block)
+                .change_context(CodegenError::MachFuncError)?;
+
+            mach_block_data.preds = ssa_block_data
+                .predecessors
+                .iter()
+                .map(|pred| MachBlock::with_id(pred.get_id()))
+                .collect();
+
+            mach_block_data.succs = ssa_block_data
+                .successors
+                .iter()
+                .map(|succ| MachBlock::with_id(succ.get_id()))
+                .collect();
         }
 
         for const_kind in self.ssa_func.consts.values() {

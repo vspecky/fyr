@@ -1,5 +1,4 @@
 use error_stack::{report, ResultExt};
-use fxhash::FxHashMap;
 use fyrc_utils::{DenseMap, EntityId};
 
 use crate::{
@@ -8,7 +7,7 @@ use crate::{
     error::{MachinstError, MachinstResult},
     hop::{MachHop, MachHopKind},
     instr::{Machinst, ThumbMachinstData},
-    value::MachGlobalValue,
+    types::MachineCode,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,21 +29,12 @@ impl EntityId for MachFunc {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum MachFuncLayoutSlot {
-    Block(MachBlock),
-    Const(MachConst),
-    Global(MachGlobalValue),
-    Hop(MachHop),
-}
-
 #[derive(Debug)]
 pub struct MachFuncData {
     pub instrs: DenseMap<Machinst, ThumbMachinstData>,
     pub consts: DenseMap<MachConst, MachConstData>,
     pub blocks: DenseMap<MachBlock, MachBlockData>,
     pub hops: DenseMap<MachHop, MachHopKind>,
-    pub layout: Vec<MachFuncLayoutSlot>,
 }
 
 impl MachFuncData {
@@ -54,7 +44,6 @@ impl MachFuncData {
             consts: DenseMap::new(),
             blocks: DenseMap::new(),
             hops: DenseMap::new(),
-            layout: Vec::new(),
         }
     }
 
@@ -68,6 +57,23 @@ impl MachFuncData {
         self.blocks
             .get_mut(block)
             .ok_or_else(|| report!(MachinstError::BlockNotFound))
+    }
+
+    pub fn get_block_len(&self, block: MachBlock) -> MachinstResult<usize> {
+        let block_data = self
+            .get_block(block)
+            .attach_printable("when getting block length")?;
+
+        let mut length = 0usize;
+        for &machinst in &block_data.instrs {
+            let machinst_data = self
+                .get_machinst(machinst)
+                .attach_printable("when getting block length")?;
+
+            length += machinst_data.len();
+        }
+
+        Ok(length)
     }
 
     pub fn get_const(&self, c: MachConst) -> MachinstResult<&MachConstData> {

@@ -4,7 +4,7 @@ use fyrc_utils::EntityId;
 
 use crate::instr::Machinst;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MachBlock(usize);
 
 impl MachBlock {
@@ -31,11 +31,17 @@ impl fmt::Display for MachBlock {
 
 #[derive(Debug)]
 pub struct MachBlockData {
+    pub preds: Vec<MachBlock>,
+    pub succs: Vec<MachBlock>,
     pub instrs: Vec<Machinst>,
 }
 
 impl MachBlockData {
     pub fn new() -> Self {
-        Self { instrs: Vec::new() }
+        Self {
+            preds: Vec::new(),
+            succs: Vec::new(),
+            instrs: Vec::new(),
+        }
     }
 }

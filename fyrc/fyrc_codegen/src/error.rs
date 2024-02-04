@@ -14,6 +14,8 @@ pub enum CodegenError {
     InstrAddFailed,
     #[error("the value defined by an instruction was not present in the SSA function")]
     InstrDefNotFound,
+    #[error("there was an error when interacting with the machinst function")]
+    MachFuncError,
     #[error("No scratch register found when one was expected")]
     NoScratchRegFound,
     #[error("Assignment to scratch register appeared twice in LTG")]

@@ -1,7 +1,7 @@
 use error_stack::{report, ResultExt};
 use fxhash::{FxHashMap, FxHashSet};
 use fyrc_ssa::{
-    block::{Block, BlockData, BlockFillKind, BlockSealStatus},
+    block::{Block, BlockData, BlockFillKind},
     constant::{Const, ConstKind},
     function::{Function, FunctionData},
     instr::{self, InstrData},
@@ -79,7 +79,7 @@ impl<'a> FunctionBuilder<'a> {
             .get_block(block)
             .change_context(BuilderError::FunctionResourceMissing)
             .attach_printable("when trying to check if block is sealed")
-            .map(|data| matches!(data.sealed, BlockSealStatus::Sealed))
+            .map(|data| data.sealed)
     }
 
     fn is_block_empty(&self, block: Block) -> BuilderResult<bool> {
@@ -116,7 +116,7 @@ impl<'a> FunctionBuilder<'a> {
             .get_block_mut(block)
             .change_context(BuilderError::FunctionResourceMissing)
             .attach_printable("when trying to set block as sealed")?;
-        block.sealed = BlockSealStatus::Sealed;
+        block.sealed = true;
         Ok(())
     }
 

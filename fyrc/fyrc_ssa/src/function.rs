@@ -5,7 +5,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use fyrc_utils::{DenseMap, EntityId};
 
 use crate::{
-    block::{Block, BlockData, BlockSealStatus},
+    block::{Block, BlockData},
     constant::{Const, ConstKind},
     error::{SsaError, SsaResult},
     instr::{Instr, InstrData},
@@ -89,7 +89,7 @@ impl FunctionData {
         let mut arg_values = Vec::with_capacity(sig.args.len());
 
         let mut block_data = BlockData::new();
-        block_data.sealed = BlockSealStatus::Sealed;
+        block_data.sealed = true;
         let block = blocks.insert(block_data);
         for (i, var_data) in sig.args.iter().enumerate() {
             let var = variables.insert(var_data.clone());

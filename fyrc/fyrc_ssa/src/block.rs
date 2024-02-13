@@ -47,12 +47,6 @@ pub enum BlockFillKind {
     Filled,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum BlockSealStatus {
-    Unsealed,
-    Sealed,
-}
-
 #[derive(Clone, Debug)]
 pub struct BlockData {
     pub predecessors: Vec<Block>,
@@ -61,7 +55,7 @@ pub struct BlockData {
     pub phis: FxHashSet<Phi>,
     instrs: Vec<Instr>,
     pub status: BlockFillKind,
-    pub sealed: BlockSealStatus,
+    pub sealed: bool,
     pub exit: Instr,
 }
 
@@ -75,14 +69,14 @@ impl BlockData {
             phis: FxHashSet::default(),
             instrs: Vec::new(),
             status: BlockFillKind::Empty,
-            sealed: BlockSealStatus::Unsealed,
+            sealed: false,
             exit: Instr::NOP,
         }
     }
 
     #[inline]
     pub fn is_sealed(&self) -> bool {
-        matches!(self.sealed, BlockSealStatus::Sealed)
+        self.sealed
     }
 
     pub fn len(&self) -> usize {

@@ -1,6 +1,6 @@
 use error_stack::{report, ResultExt};
 use fyrc_ssa::{
-    block::{BlockData, BlockSealStatus},
+    block::{BlockData},
     function::FunctionData,
     instr,
 };
@@ -41,7 +41,7 @@ fn remove_critical_edges(func: &mut FunctionData) -> PassResult<(), CriticalEdge
             }
 
             let mut new_block_data = BlockData::new();
-            new_block_data.sealed = BlockSealStatus::Sealed;
+            new_block_data.sealed = true;
             let jump_instr = func
                 .instrs
                 .insert(instr::InstrData::Jump(instr::Jump { dest: succ }));

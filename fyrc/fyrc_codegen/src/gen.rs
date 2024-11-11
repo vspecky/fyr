@@ -27,13 +27,13 @@ use crate::{
 const SCRATCH_HI: Register = Register(0);
 const WORD_SIZE: u8 = 4;
 
-pub struct CodegenCtx<'a> {
+pub struct CodegenCtx<'a, 'b> {
     builder: MachFuncBuilder<'a>,
-    ssa_func: SsaFunctionData,
+    ssa_func: &'b SsaFunctionData,
     regalloc: RegallocOutput,
 }
 
-impl<'a> CodegenCtx<'a> {
+impl<'a, 'b> CodegenCtx<'a, 'b> {
     const MAX_SP_OFFSET_WORD_RANGE: u16 = 127;
     const MAX_SP_RELATIVE_READ_WORD_RANGE: u16 = 255;
     const CALLER_SAVED_REGS: [Register; 4] =
@@ -43,7 +43,7 @@ impl<'a> CodegenCtx<'a> {
 
     pub fn new(
         builder: MachFuncBuilder<'a>,
-        ssa_func: SsaFunctionData,
+        ssa_func: &'b SsaFunctionData,
         regalloc: RegallocOutput,
     ) -> Self {
         Self {
@@ -709,6 +709,10 @@ impl<'a> CodegenCtx<'a> {
         for block in self.ssa_func.blocks.keys() {
             self.process_block(block)?;
         }
+
+        self.builder
+            .finalize()
+            .change_context(CodegenError::MachFuncError)?;
         Ok(())
     }
 }
@@ -748,9 +752,13 @@ impl LTGApplicator {
         }
     }
 
-    fn with_mem2mem_reg<F>(&mut self, codegen: &mut CodegenCtx<'_>, func: F) -> CodegenResult<()>
+    fn with_mem2mem_reg<F>(
+        &mut self,
+        codegen: &mut CodegenCtx<'_, '_>,
+        func: F,
+    ) -> CodegenResult<()>
     where
-        F: Fn(&mut CodegenCtx<'_>, Register) -> CodegenResult<()>,
+        F: Fn(&mut CodegenCtx<'_, '_>, Register) -> CodegenResult<()>,
     {
         if let Some(preallocated) = self.preallocated_mem2mem_reg {
             return func(codegen, preallocated);
@@ -786,7 +794,7 @@ impl LTGApplicator {
 
     fn apply(
         mut self,
-        codegen: &mut CodegenCtx<'_>,
+        codegen: &mut CodegenCtx<'_, '_>,
         ltg: LocationTransferGraph,
         free_regs: FreeRegisters,
     ) -> CodegenResult<()> {

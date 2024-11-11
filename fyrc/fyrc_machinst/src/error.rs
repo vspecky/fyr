@@ -8,4 +8,6 @@ pub enum MachinstError {
     ConstNotFound,
     #[error("instruction not found in the function")]
     InstrNotFound,
+    #[error("Unexpected Data Found: {0}")]
+    UnexpectedDataFound(&'static str),
 }

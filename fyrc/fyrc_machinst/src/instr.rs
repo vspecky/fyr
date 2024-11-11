@@ -3,7 +3,7 @@ pub mod thumb;
 use fyrc_utils::EntityId;
 pub use thumb::ThumbMachinstData;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Machinst(usize);
 
 impl EntityId for Machinst {

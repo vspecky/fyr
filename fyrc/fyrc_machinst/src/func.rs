@@ -6,7 +6,7 @@ use crate::{
     constant::{MachConst, MachConstData},
     error::{MachinstError, MachinstResult},
     hop::{MachHop, MachHopKind},
-    instr::{Machinst, ThumbMachinstData},
+    instr::{thumb::BranchDestKind, Machinst, ThumbMachinstData},
     types::MachineCode,
 };
 
@@ -95,5 +95,75 @@ impl MachFuncData {
         self.instrs
             .get_mut(machinst)
             .ok_or_else(|| report!(MachinstError::InstrNotFound))
+    }
+
+    pub fn redirect_predecessor_branches(
+        &mut self,
+        block: MachBlock,
+        redirect_to: MachBlock,
+    ) -> MachinstResult<()> {
+        let preds = self.get_block(block)?.preds.clone();
+        for pred in preds {
+            self.update_branch_destination(pred, block, redirect_to)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn update_branch_destination(
+        &mut self,
+        forb: MachBlock,
+        from: MachBlock,
+        to: MachBlock,
+    ) -> MachinstResult<()> {
+        let block_data = self.get_block(forb)?;
+        let branch_instrs = block_data
+            .instrs
+            .iter()
+            .rev()
+            .copied()
+            .take(2)
+            .collect::<Vec<_>>();
+
+        if branch_instrs.is_empty() {
+            return Err(report!(MachinstError::InstrNotFound))
+                .attach_printable("expected branch instructions at the end of function");
+        }
+
+        let uncond_machinst = self.get_machinst_mut(branch_instrs[0])?;
+        let mut updated = false;
+
+        if let ThumbMachinstData::UncondBranch(branch) = uncond_machinst {
+            if branch.soffset11.kind == BranchDestKind::Block(from) {
+                branch.soffset11.kind = BranchDestKind::Block(to);
+                updated = true;
+            }
+
+            let maybe_cond = branch_instrs
+                .get(1)
+                .map(|&machinst| self.get_machinst_mut(machinst))
+                .transpose()?;
+
+            if let Some(ThumbMachinstData::CondBranch(cbranch)) = maybe_cond {
+                if cbranch.soffset8.kind == BranchDestKind::Block(from) {
+                    cbranch.soffset8.kind = BranchDestKind::Block(to);
+                    updated = true;
+                }
+            }
+        }
+
+        if updated {
+            let block_data = self.get_block_mut(forb)?;
+            block_data.succs.retain(|b| *b != from);
+            block_data.succs.push(to);
+
+            let from_block_data = self.get_block_mut(from)?;
+            from_block_data.preds.retain(|b| *b != forb);
+
+            let to_block_data = self.get_block_mut(to)?;
+            to_block_data.preds.push(forb);
+        }
+
+        Ok(())
     }
 }

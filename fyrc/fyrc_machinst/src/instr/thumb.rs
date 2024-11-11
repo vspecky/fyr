@@ -65,7 +65,7 @@ pub enum LdStrFlag {
     Load,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BranchDestKind {
     Block(MachBlock),
     Hop(MachHop),
@@ -151,7 +151,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValueRefKind {
     Const(MachConst),
     Global(MachGlobalValue),
@@ -1572,6 +1572,31 @@ pub enum ThumbMachinstData {
     Swi(Swi),
     UncondBranch(UncondBranch),
     BranchWithLink(BranchWithLink),
+}
+
+impl ThumbMachinstData {
+    pub fn is_return(&self) -> bool {
+        matches!(
+            self,
+            Self::PushPopRegs(PushPopRegs {
+                ld_str_flag: LdStrFlag::Load,
+                pc_lr_bit: true,
+                ..
+            })
+        )
+    }
+
+    pub fn is_uncond_branch(&self) -> bool {
+        matches!(self, Self::UncondBranch(_))
+    }
+
+    pub fn is_cond_branch(&self) -> bool {
+        matches!(self, Self::CondBranch(_))
+    }
+
+    pub fn is_branch(&self) -> bool {
+        self.is_uncond_branch() || self.is_cond_branch()
+    }
 }
 
 impl MachineCode for ThumbMachinstData {
